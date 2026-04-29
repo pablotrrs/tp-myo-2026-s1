@@ -1,0 +1,15 @@
+7
+o a b c d e n
+o
+n
+10
+o a 3
+o b 1
+o c 1
+a b 1
+a d 1
+b e 3
+c d 4
+c e 4
+d n 4
+e n 1

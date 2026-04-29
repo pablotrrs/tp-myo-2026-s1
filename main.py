@@ -103,7 +103,10 @@ def create_model(data: Dict[str, Any]) -> Tuple[Model, Dict]:
     # Create flow variables for each directed edge with capacity upper bounds
     flow_vars = {}
     for u, v, capacity in edges:
-        flow_vars[u, v] = model.addVar(name=f"flujo_{u}_{v}", vtype="C", lb=0, ub=capacity)
+        if u == source or v == sink:
+            flow_vars[u, v] = model.addVar(name=f"flujo_{u}_{v}", vtype="C", lb=0, ub=capacity)
+        else:
+            flow_vars[u, v] = model.addVar(name=f"flujo_{u}_{v}", vtype="C", lb=-capacity, ub=capacity)
     
     # Create total flow variable
     F = model.addVar(name="Flujo_Total", vtype="C", lb=0)
@@ -113,11 +116,11 @@ def create_model(data: Dict[str, Any]) -> Tuple[Model, Dict]:
     
     # Add flow conservation constraints
     for node in nodes:
-        # Incoming flow: sum of all edges pointing to this node
-        incoming = quicksum(flow_vars[u, v] for (u, v) in flow_vars.keys() if v == node)
-        
         # Outgoing flow: sum of all edges leaving this node
         outgoing = quicksum(flow_vars[u, v] for (u, v) in flow_vars.keys() if u == node)
+        
+        # Incoming flow: sum of all edges pointing to this node
+        incoming = quicksum(flow_vars[u, v] for (u, v) in flow_vars.keys() if v == node)
         
         # Apply balance constraints
         if node == source:
@@ -127,8 +130,8 @@ def create_model(data: Dict[str, Any]) -> Tuple[Model, Dict]:
             # At sink: incoming - outgoing = total flow
             model.addCons(incoming - outgoing == F, name=f"balance_sink_{node}")
         else:
-            # At intermediate nodes: incoming - outgoing = 0 (conservation)
-            model.addCons(incoming - outgoing == 0, name=f"balance_intermediate_{node}")
+            # At intermediate nodes: outgoing - incoming = 0 (conservation)
+            model.addCons(outgoing - incoming == 0, name=f"balance_intermediate_{node}")
     
     variables['flow'] = flow_vars
     variables['F'] = F
@@ -167,7 +170,7 @@ def solve_model(model: Model, variables: Dict) -> Tuple[bool, float, Dict[str, f
         flow_vars = variables['flow']
         for (u, v), var in flow_vars.items():
             val = model.getVal(var)
-            if val > 1e-6:  # Only include non-zero flows
+            if abs(val) > 1e-6:  # Only include non-zero flows
                 solution[f"flujo_{u}_{v}"] = val
     
     return is_optimal, obj_value, solution
