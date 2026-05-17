@@ -1,5 +1,12 @@
-# Pacientes
-1, 2, 3, 4
+# Tolerancia temporal global (minutos)
+30
+
+# Pacientes con horarios de cita
+# Formato: id_paciente, tiempo_cita (minutos)
+1, 60
+2, 90
+3, 120
+4, 150
 
 # Combis y sus capacidades (Nombre:Capacidad)
 Combi_A:2

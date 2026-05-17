@@ -1,11 +1,14 @@
 """
-Maximum Flow Problem Solver
-Main module for solving maximum flow problems using PySCIPOpt
+Linear Programming Solver for Multiple Problem Types
+Supports: Maximum Flow, Vehicle Routing Problem with Time Windows (VRP-TW)
 """
 
 from pyscipopt import Model, quicksum
 import sys
 from typing import List, Dict, Tuple, Any
+
+# Import VRP-TW solver from combis_pacientes_modelo
+from combis_pacientes_modelo import leer_datos_vrp, resolver_vrp_ventanas
 
 
 def read_input(filename: str) -> Dict[str, Any]:
@@ -204,7 +207,7 @@ def print_solution(is_optimal: bool, obj_value: float, solution: Dict[str, float
     print("="*70 + "\n")
 
 
-def main(input_file: str) -> None:
+def main_maxflow(input_file: str) -> None:
     """
     Main function to orchestrate the maximum flow problem solving process.
     
@@ -224,19 +227,43 @@ def main(input_file: str) -> None:
     is_optimal, obj_value, solution = solve_model(model, variables)
     
     print_solution(is_optimal, obj_value, solution)
+
+
+def main_vrptw(input_file: str) -> None:
+    """
+    Main function to solve Vehicle Routing Problem with Time Windows.
+    
+    Args:
+        input_file: Path to the input file
+    """
+    print(f"Loading: {input_file}")
+    pacientes, combis, capacidades, tiempos_cita, tolerancia, distancias = leer_datos_vrp(input_file)
+    print(f"Patients: {pacientes}")
+    print(f"Vehicles: {combis}")
+    print(f"Tolerance (minutes): {tolerancia}\n")
+    
+    resolver_vrp_ventanas(pacientes, combis, capacidades, tiempos_cita, tolerancia, distancias)
     
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python main.py <input_file>")
-        print("\nInput file format:")
-        print("  Line 1: number of nodes")
-        print("  Line 2: node names (space-separated)")
-        print("  Line 3: source node name")
-        print("  Line 4: sink node name")
-        print("  Line 5: number of edges")
-        print("  Lines 6+: node1 node2 capacity")
+    if len(sys.argv) < 3:
+        print("Usage: python main.py <problem_type> <input_file>")
+        print("\nProblem types:")
+        print("  maxflow   - Maximum Flow Problem")
+        print("  vrptw     - Vehicle Routing Problem with Time Windows")
+        print("\nExamples:")
+        print("  python main.py maxflow multi_st.txt")
+        print("  python main.py vrptw input_combis_pacientes.txt")
         sys.exit(1)
     
-    input_file = sys.argv[1]
-    main(input_file)
+    problem_type = sys.argv[1].lower()
+    input_file = sys.argv[2]
+    
+    if problem_type == "maxflow":
+        main_maxflow(input_file)
+    elif problem_type == "vrptw":
+        main_vrptw(input_file)
+    else:
+        print(f"Error: Unknown problem type '{problem_type}'")
+        print("Supported types: maxflow, vrptw")
+        sys.exit(1)
