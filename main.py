@@ -7,6 +7,16 @@ from pyscipopt import Model, quicksum
 import sys
 from typing import List, Dict, Tuple, Any
 
+# Reserved node names for the super-source / super-sink reduction (must not appear in input).
+SUPER_S = "__SRC__"
+SUPER_T = "__SNK__"
+
+
+def _big_m_capacity(edges: List[Tuple[str, str, float]]) -> float:
+    """Finite upper bound on total feasible flow (sum of positive edge capacities)."""
+    total = sum(c for _, _, c in edges if c > 0)
+    return total if total > 0 else 1.0
+
 
 def read_input(filename: str) -> Dict[str, Any]:
     """
@@ -15,8 +25,8 @@ def read_input(filename: str) -> Dict[str, Any]:
     Expected format:
     - Line 1: number of nodes
     - Line 2: list of node names (space-separated)
-    - Line 3: source node name
-    - Line 4: sink node name
+    - Line 3: source node name(s), space-separated (one or more)
+    - Line 4: sink node name(s), space-separated (one or more)
     - Line 5: number of directed edges
     - Lines 6+: each line contains "node1 node2 capacity"
     
@@ -27,8 +37,8 @@ def read_input(filename: str) -> Dict[str, Any]:
         Dictionary containing parsed input data with keys:
             - 'nodes': list of node names
             - 'edges': list of tuples (source, dest, capacity)
-            - 'source': source node name
-            - 'sink': sink node name
+            - 'sources': list of source node names
+            - 'sinks': list of sink node names
     """
     data = {}
     try:
@@ -40,12 +50,19 @@ def read_input(filename: str) -> Dict[str, Any]:
             nodes = lines[1].split()
             assert len(nodes) == n_nodes, f"Expected {n_nodes} nodes, got {len(nodes)}"
             
-            # Parse source and sink
-            source = lines[2]
-            sink = lines[3]
+            assert SUPER_S not in nodes, f"Node name '{SUPER_S}' is reserved for the model"
+            assert SUPER_T not in nodes, f"Node name '{SUPER_T}' is reserved for the model"
             
-            assert source in nodes, f"Source '{source}' not in nodes"
-            assert sink in nodes, f"Sink '{sink}' not in nodes"
+            # Parse sources and sinks (multiple allowed; duplicates removed, order kept)
+            sources = list(dict.fromkeys(lines[2].split()))
+            sinks = list(dict.fromkeys(lines[3].split()))
+            
+            assert sources, "At least one source node is required"
+            assert sinks, "At least one sink node is required"
+            for s in sources:
+                assert s in nodes, f"Source '{s}' not in nodes"
+            for t in sinks:
+                assert t in nodes, f"Sink '{t}' not in nodes"
             
             # Parse edges
             n_edges = int(lines[4])
@@ -59,8 +76,8 @@ def read_input(filename: str) -> Dict[str, Any]:
             
             data['nodes'] = nodes
             data['edges'] = edges
-            data['source'] = source
-            data['sink'] = sink
+            data['sources'] = sources
+            data['sinks'] = sinks
             
     except FileNotFoundError:
         print(f"Error: File '{filename}' not found.")
@@ -83,8 +100,8 @@ def create_model(data: Dict[str, Any]) -> Tuple[Model, Dict]:
         data: Dictionary containing:
             - 'nodes': list of node names
             - 'edges': list of tuples (source, dest, capacity)
-            - 'source': source node name
-            - 'sink': sink node name
+            - 'sources': list of source node names (supply nodes)
+            - 'sinks': list of sink node names (demand nodes)
         
     Returns:
         Tuple of (Model, variables_dict) where variables_dict contains:
@@ -95,18 +112,25 @@ def create_model(data: Dict[str, Any]) -> Tuple[Model, Dict]:
     
     nodes = data['nodes']
     edges = data['edges']
-    source = data['source']
-    sink = data['sink']
+    sources: List[str] = data['sources']
+    sinks: List[str] = data['sinks']
     
     variables = {}
+    M = _big_m_capacity(edges)
     
     # Create flow variables for each directed edge with capacity upper bounds
     flow_vars = {}
     for u, v, capacity in edges:
-        if u == source or v == sink:
-            flow_vars[u, v] = model.addVar(name=f"flujo_{u}_{v}", vtype="C", lb=0, ub=capacity)
-        else:
-            flow_vars[u, v] = model.addVar(name=f"flujo_{u}_{v}", vtype="C", lb=-capacity, ub=capacity)
+        # Standard maximum-flow formulation: each directed edge can carry
+        # between 0 and its capacity in the given direction. If you need
+        # the opposite direction, include the reverse edge in the input.
+        flow_vars[u, v] = model.addVar(name=f"flujo_{u}_{v}", vtype="C", lb=0, ub=capacity)
+    
+    # Super-source -> each network source; each network sink -> super-sink
+    for s in sources:
+        flow_vars[SUPER_S, s] = model.addVar(name=f"flujo_{SUPER_S}_{s}", vtype="C", lb=0, ub=M)
+    for t in sinks:
+        flow_vars[t, SUPER_T] = model.addVar(name=f"flujo_{t}_{SUPER_T}", vtype="C", lb=0, ub=M)
     
     # Create total flow variable
     F = model.addVar(name="Flujo_Total", vtype="C", lb=0)
@@ -114,24 +138,23 @@ def create_model(data: Dict[str, Any]) -> Tuple[Model, Dict]:
     # Set objective: maximize total flow
     model.setObjective(F, sense="maximize")
     
+    extended_nodes = nodes + [SUPER_S, SUPER_T]
+    
     # Add flow conservation constraints
-    for node in nodes:
+    for node in extended_nodes:
         # Outgoing flow: sum of all edges leaving this node
         outgoing = quicksum(flow_vars[u, v] for (u, v) in flow_vars.keys() if u == node)
         
         # Incoming flow: sum of all edges pointing to this node
         incoming = quicksum(flow_vars[u, v] for (u, v) in flow_vars.keys() if v == node)
         
-        # Apply balance constraints
-        if node == source:
-            # At source: outgoing - incoming = total flow
-            model.addCons(outgoing - incoming == F, name=f"balance_source_{node}")
-        elif node == sink:
-            # At sink: incoming - outgoing = total flow
-            model.addCons(incoming - outgoing == F, name=f"balance_sink_{node}")
+        if node == SUPER_S:
+            model.addCons(outgoing - incoming == F, name="balance_super_source")
+        elif node == SUPER_T:
+            model.addCons(incoming - outgoing == F, name="balance_super_sink")
         else:
-            # At intermediate nodes: outgoing - incoming = 0 (conservation)
-            model.addCons(outgoing - incoming == 0, name=f"balance_intermediate_{node}")
+            # All original nodes (sources/sinks of the instance) are transshipment here
+            model.addCons(outgoing - incoming == 0, name=f"balance_{node}")
     
     variables['flow'] = flow_vars
     variables['F'] = F
@@ -215,7 +238,8 @@ def main(input_file: str) -> None:
     data = read_input(input_file)
     
     print(f"Network: {len(data['nodes'])} nodes, {len(data['edges'])} edges")
-    print(f"Source: {data['source']}, Sink: {data['sink']}\n")
+    print(f"Sources: {', '.join(data['sources'])}")
+    print(f"Sinks: {', '.join(data['sinks'])}\n")
     
     print("Creating optimization model...")
     model, variables = create_model(data)
@@ -232,8 +256,8 @@ if __name__ == "__main__":
         print("\nInput file format:")
         print("  Line 1: number of nodes")
         print("  Line 2: node names (space-separated)")
-        print("  Line 3: source node name")
-        print("  Line 4: sink node name")
+        print("  Line 3: source node name(s), space-separated")
+        print("  Line 4: sink node name(s), space-separated")
         print("  Line 5: number of edges")
         print("  Lines 6+: node1 node2 capacity")
         sys.exit(1)
