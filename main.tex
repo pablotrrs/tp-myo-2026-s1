@@ -1,0 +1,249 @@
+\documentclass[12pt]{article}
+
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[margin=15mm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amsthm,amssymb}
+\usepackage{mathtools}
+\usepackage{hyperref}
+\usepackage{nameref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{fancyvrb}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{definition}{Definition}
+
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+
+\def\R{{\mathbb{R}}}
+\def\Z{{\mathbb{Z}}}
+\def\Zz{{\mathbb{Z}_{\geq 0}}}
+
+\newcommand{\maxi}{\texttt{max}\quad\,\,}
+\newcommand{\mini}{\texttt{minimize}\quad\,\,}
+\newcommand{\subj}{\texttt{subject to}\quad}
+
+\usepackage{enumitem}
+\setlist{nosep}
+
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    breaklines=true,
+    showstringspaces=false,
+    tabsize=4
+}
+
+\title{\Huge Trabajo Práctico\\\Large Modelado y Optimización}
+\date{
+    \large 2026/1 \\
+    Universidad Nacional de General Sarmiento \\
+    \vspace{2cm}
+    \hfill \textbf{Integrantes:}\\
+    \hfill Aragón, Evelin\\
+    \hfill Faccini, Gonzalo\\
+    \hfill Pintos, Sebastián\\
+    \hfill Torres, Pablo
+}
+\author{\textbf{Profesor:}\\Marcelo Mydlarz}
+
+\begin{document}
+
+\maketitle
+\newpage
+\tableofcontents
+\newpage
+
+\section{Introducción}
+
+En este trabajo práctico se desarrolla un solver eficiente para resolver problemas de flujo máximo en redes dirigidas. El proyecto implementa una solución general que puede manejar:
+
+\begin{itemize}
+    \item \textbf{Flujo máximo clásico}: Con una única fuente y un único destino
+    \item \textbf{Múltiples fuentes y destinos}: Mediante reducción a forma clásica
+    \item \textbf{Problemas de distribución}: Como el modelo de centros y pacientes (VRP)
+\end{itemize}
+
+El problema de flujo máximo es un clásico en teoría de grafos y optimización combinatoria, con múltiples aplicaciones en la práctica: desde redes de comunicación hasta distribución de recursos.
+
+\newpage
+\section{Formulación Matemática}
+
+\subsection{Modelo 1: Flujo Máximo Clásico}
+
+\subsubsection{Descripción del Problema}
+
+Dado un grafo dirigido $G = (V, E)$ con una fuente $s$ y un destino $t$, encontrar el máximo flujo desde $s$ hacia $t$. Se debe respetar la capacidad máxima de cada arista y la conservación del flujo en los nodos intermedios.
+
+\subsubsection{Modelo Matemático}
+
+\subsubsection*{Constantes}
+
+\begin{itemize}
+    \item $V$: Conjunto de vértices (nodos) del grafo
+    \item $E$: Conjunto de aristas dirigidas
+    \item $c(u,v)$: Capacidad máxima de la arista $(u,v)$ para $(u,v) \in E$
+    \item $s \in V$: Nodo fuente
+    \item $t \in V$: Nodo destino
+\end{itemize}
+
+\subsubsection*{Variables de Decisión}
+
+\begin{itemize}
+    \item $x_{u,v}$: Variable continua que representa el flujo en la arista $(u,v)$, $x_{u,v} \geq 0$ para toda $(u,v) \in E$
+    \item $F$: Variable continua que representa el flujo total
+\end{itemize}
+
+\begin{align*}
+  \max & \quad F \\
+  \text{s.a.} \quad
+    & \sum_{(s,v) \in E} x_{s,v} = F \\
+    & \sum_{(u,t) \in E} x_{u,t} = F \\
+    & \sum_{(u,i) \in E} x_{u,i} = \sum_{(i,v) \in E} x_{i,v} \quad \forall i \in V \setminus \{s,t\} \\
+    & 0 \leq x_{u,v} \leq c(u,v) \quad \forall (u,v) \in E \\
+    & F \geq 0
+\end{align*}
+
+\subsubsection{Explicación del Modelo}
+
+\subsubsection*{Función Objetivo}
+
+Maximizar el flujo total que puede transportarse desde la fuente hacia el destino:
+\[
+\text{Maximizar} \quad F
+\]
+
+\subsubsection*{Restricciones}
+
+\begin{itemize}
+    \item Restricción 1: El flujo que sale de la fuente debe igualar el flujo total $F$
+    \item Restricción 2: El flujo que llega al destino debe igualar el flujo total $F$
+    \item Restricción 3: Conservación de flujo en nodos intermedios (todo lo que entra debe salir)
+    \item Restricción 4: Límites de capacidad en cada arista
+\end{itemize}
+
+\subsection{Modelo 2: Múltiples Fuentes y Destinos}
+
+\subsubsection{Descripción del Problema}
+
+Extensión del problema clásico de flujo máximo donde existen múltiples nodos origen $S = \{s_1, s_2, \ldots, s_k\}$ y múltiples nodos destino $T = \{t_1, t_2, \ldots, t_m\}$. El objetivo es encontrar el máximo flujo total que puede transportarse desde cualquiera de las fuentes hacia cualquiera de los destinos.
+
+\subsubsection{Modelo Matemático}
+
+\subsubsection*{Constantes}
+
+\begin{itemize}
+    \item $V$: Conjunto de vértices (nodos) del grafo
+    \item $E$: Conjunto de aristas dirigidas
+    \item $c(u,v)$: Capacidad máxima de la arista $(u,v)$ para $(u,v) \in E$
+    \item $S \subseteq V$: Conjunto de nodos fuente
+    \item $T \subseteq V$: Conjunto de nodos destino
+    \item $M = \sum_{u,v \in E} c(u,v)$: Cota superior sobre el flujo factible
+\end{itemize}
+
+\subsubsection*{Variables de Decisión}
+
+\begin{itemize}
+    \item $x_{u,v}$: Variable continua que representa el flujo en la arista $(u,v)$, $x_{u,v} \geq 0$ para toda $(u,v) \in E$ extendido
+    \item $F$: Variable continua que representa el flujo total
+    \item $\sigma$: Nodo ficticio super-source
+    \item $\tau$: Nodo ficticio super-sink
+\end{itemize}
+
+Sea $V' = V \cup \{\sigma, \tau\}$ y $E'$ el conjunto extendido de aristas:
+
+\begin{align*}
+  \max & \quad F \\
+  \text{s.a.} \quad
+    & \sum_{s \in S} x_{\sigma,s} = F \\
+    & \sum_{t \in T} x_{t,\tau} = F \\
+    & \sum_{(u,v) \in E'} x_{u,v} = \sum_{(v,w) \in E'} x_{v,w} \quad \forall v \in V' \\
+    & x_{\sigma,s} \leq M \quad \forall s \in S \\
+    & x_{t,\tau} \leq M \quad \forall t \in T \\
+    & x_{u,v} \leq c(u,v) \quad \forall (u,v) \in E
+\end{align*}
+
+\subsubsection{Explicación del Modelo}
+
+\subsubsection*{Función Objetivo}
+
+Maximizar el flujo total que puede transportarse desde cualquier fuente hacia cualquier destino:
+\[
+\text{Maximizar} \quad F
+\]
+
+\subsubsection*{Restricciones}
+
+\begin{itemize}
+    \item Restricción 1: El flujo total que sale del super-source debe igualar a $F$
+    \item Restricción 2: El flujo total que llega al super-sink debe igualar a $F$
+    \item Restricción 3: Conservación de flujo en todos los nodos (todo lo que entra debe salir)
+    \item Restricción 4 y 5: Límites sobre el flujo desde el super-source y hacia el super-sink
+    \item Restricción 6: Límites de capacidad en las aristas del grafo original
+\end{itemize}
+
+\subsection{Modelo 3: Ruteo de Vehículos (VRP)}
+
+\subsubsection{Descripción del Problema}
+
+Problema de optimizar rutas de distribución donde un conjunto de vehículos debe visitar clientes (en nuestro caso, pacientes) desde un centro de distribución. El objetivo es minimizar la distancia total recorrida, respetando la capacidad de cada vehículo y visitando cada cliente exactamente una vez.
+
+\subsubsection{Modelo Matemático}
+
+\subsubsection*{Constantes}
+
+\begin{itemize}
+    \item $n$: Número total de nodos (incluyendo el depósito)
+    \item $k$: Número de vehículos disponibles
+    \item $d_{i,j}$: Distancia entre el nodo $i$ y el nodo $j$
+    \item $\text{cap}_k$: Capacidad máxima del vehículo $k$
+    \item $\text{inicio}_i, \text{fin}_i$: Ventana de tiempo para visitar el nodo $i$ (en problema VRPTW)
+\end{itemize}
+
+\subsubsection*{Variables de Decisión}
+
+\begin{itemize}
+    \item $x_{i,j,k} \in \{0,1\}$: Variable binaria que indica si el vehículo $k$ viaja directamente del nodo $i$ al nodo $j$
+    \item $u_{i,k} \in [1,n]$: Variable auxiliar para prevenir subtours
+    \item $T_{i,k} \geq 0$: Tiempo de llegada del vehículo $k$ al nodo $i$
+\end{itemize}
+
+\begin{align*}
+  \min & \quad \sum_{i,j,k} d_{i,j} \cdot x_{i,j,k} \\
+  \text{s.a.} \quad
+    & \sum_{i,k} x_{i,j,k} = 1 \quad \forall j \in \text{Clientes} \\
+    & \sum_{i} x_{i,p,k} = \sum_{j} x_{p,j,k} \quad \forall p, k \\
+    & \sum_{j: j \ne i} x_{i,j,k} \leq \text{cap}_k \quad \forall i,k \\
+    & u_{i,k} - u_{j,k} + n \cdot x_{i,j,k} \leq n - 1 \quad \forall i,j,k \\
+    & T_{i,k} \in [\text{inicio}_i, \text{fin}_i] \quad \forall i,k \quad \text{(VRPTW)} \\
+    & x_{i,j,k} \in \{0,1\}, \quad u_{i,k} \geq 1
+\end{align*}
+
+\subsubsection{Explicación del Modelo}
+
+\subsubsection*{Función Objetivo}
+
+Minimizar la distancia total recorrida por todos los vehículos:
+\[
+\text{Minimizar} \quad \sum_{i,j,k} d_{i,j} \cdot x_{i,j,k}
+\]
+
+\subsubsection*{Restricciones}
+
+\begin{itemize}
+    \item Restricción 1: Cada cliente debe ser visitado exactamente una vez
+    \item Restricción 2: Conservación de flujo en cada nodo (si un vehículo llega, debe partir)
+    \item Restricción 3: Capacidad máxima de cada vehículo
+    \item Restricción 4: Prevención de subtours (ciclos desconectados)
+    \item Restricción 5: Restricción de ventanas de tiempo para VRPTW (opcional)
+\end{itemize}
+
+\end{document}

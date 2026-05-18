@@ -1,151 +1,259 @@
-# Vehicle Routing Problem with Time Windows (VRPTW)
+# Maximum Flow Problem Solver
 
-Solver para optimización de rutas de combis de pacientes usando programación lineal con **PySCIPOpt**.
+Solver para problemas de flujo máximo en redes dirigidas usando programación lineal con **PySCIPOpt**.
 
-## Descripción
+## Tabla de Contenidos
 
-Este proyecto implementa solvers para resolver problemas de ruteo de vehículos, específicamente para optimizar las rutas de combis que transportan pacientes desde un centro de origen hacia sus domicilios y de regreso.
+1. [Aspectos Técnicos](#aspectos-técnicos)
+2. [Modelos Matemáticos](#modelos-matemáticos)
 
-### Problema Abordado
+---
 
-Optimizar el ruteo de un conjunto de combis que debe visitar a pacientes en diferentes ubicaciones, considerando:
-- Capacidad máxima de pasajeros por combi
-- Ubicación de cada paciente y distancia entre ellos
-- Minimización del tiempo total de viaje
+## Aspectos Técnicos
 
-Se incluye también una variante con **ventanas de tiempo** donde cada paciente tiene un turno específico en el que debe ser atendido.
+### Descripción
 
-## Requisitos
+Este proyecto implementa un solver eficiente para resolver problemas de flujo máximo en redes dirigidas. El solver soporta múltiples configuraciones:
+- **Flujo máximo clásico**: Una fuente y un destino
+- **Múltiples fuentes y destinos**: Generalización que convierte el problema a su forma clásica
+- **Variante de centros y pacientes**: Modelo especializado para problemas de distribución
+
+### Requisitos
 
 - Python 3.7+
-- PySCIPOpt
+- PySCIPOpt 6.0+
 
-### Instalación de dependencias
+### Instalación de Dependencias
 
 ```bash
 pip install pyscipopt
 ```
 
-## Uso
+### Archivos del Proyecto
 
-### Modelos Disponibles
+| Archivo | Descripción |
+|---------|-------------|
+| `main.py` | Script principal que contiene toda la lógica del solver |
+| `input_file.txt` | Archivo de ejemplo para el modelo básico (una fuente, un destino) |
+| `multi_st.txt` | Archivo de ejemplo para múltiples fuentes y destinos |
+| `input_combis_pacientes.txt` | Archivo de ejemplo para modelo VRP básico |
+| `input_combis_pacientes_tiempo.txt` | Archivo de ejemplo para modelo VRPTW |
+| `combis_pacientes_modelo.py` | Solver para VRP (ruteo de pacientes) |
+| `combis_pacientes_modelo_tiempo.py` | Solver para VRPTW (ruteo con ventanas de tiempo) |
+| `requirements.txt` | Dependencias del proyecto |
+| `README.md` | Este archivo |
 
-#### 1. VRP Básico (`combis_pacientes_modelo.py`)
-Resuelve el problema de ruteo sin restricciones de tiempo.
+### Estructura del Archivo de Entrada
 
-#### 2. VRPTW (`combis_pacientes_modelo_tiempo.py`)
-Resuelve el problema de ruteo considerando ventanas de tiempo específicas para cada paciente.
-
-### Estructura del archivo de entrada
-
-Los archivos de entrada siguen este formato:
+#### Formato General
 
 ```
-Tolerancia: <valor>
-
-# Pacientes
-# id,turno
-<id_paciente>,<turno>
-<id_paciente>,<turno>
-...
-
-# Combis
-# nombre:capacidad
-<nombre_combi>:<capacidad>
-<nombre_combi>:<capacidad>
-...
-
-# Matriz de distancias
-# origen,destino,distancia
-<nodo_origen>,<nodo_destino>,<distancia>
-<nodo_origen>,<nodo_destino>,<distancia>
+<número_de_nodos>
+<nombres_nodos>
+<nodo(s)_origen>
+<nodo(s)_destino>
+<número_de_aristas>
+<nodo1> <nodo2> <capacidad>
+<nodo1> <nodo2> <capacidad>
 ...
 ```
 
-**Nota:** El nodo `0` representa el centro de origen.
+**Notas:**
+- Los nombres de nodos no pueden ser `__SRC__` ni `__SNK__` (reservados internamente)
+- Las fuentes y destinos pueden ser múltiples (separados por espacios)
+- Las aristas son dirigidas: cada arista va de `nodo1` a `nodo2`
 
-### Ejemplo de Entrada
+#### Ejemplo: Flujo Máximo Clásico (`input_file.txt`)
 
-Archivo `input_combis_pacientes_tiempo.txt`:
 ```
-Tolerancia: 120
-
-# Pacientes
-# id,turno
-1,1
-2,1
-3,2
-4,2
-
-# Combis
-# nombre:capacidad
-Combi_A:3
-Combi_B:2
-
-# Matriz de distancias
-# origen,destino,distancia
-0,1,10.5
-0,2,12.0
-1,3,8.5
-1,4,15.0
-...
+4
+S A B T
+S
+T
+5
+S A 3
+S B 2
+A B 1
+A T 1
+B T 3
 ```
+
+Este ejemplo define una red con:
+- 4 nodos: S (origen), A, B, T (destino)
+- 5 aristas dirigidas con sus capacidades máximas
+
+#### Ejemplo: Múltiples Fuentes y Destinos (`multi_st.txt`)
+
+```
+5
+S1 S2 M T1 T2
+S1 S2
+T1 T2
+4
+S1 M 5
+S2 M 5
+M T1 3
+M T2 3
+```
+
+Este ejemplo define:
+- 2 nodos origen (S1, S2) y 2 nodos destino (T1, T2)
+- El nodo M actúa como punto de distribución intermedio
 
 ### Ejecución
 
 ```bash
+# Flujo máximo clásico
+python main.py input_file.txt
+
+# Múltiples fuentes y destinos
+python main.py multi_st.txt
+
+# Modelos de ruteo de pacientes
 python combis_pacientes_modelo.py input_combis_pacientes.txt
 python combis_pacientes_modelo_tiempo.py input_combis_pacientes_tiempo.txt
 ```
 
-### Salida Esperada
+### Salida del Programa
 
-El programa retorna:
-- Estado de la solución (OPTIMAL o FEASIBLE)
-- Costo total (tiempo de viaje minimizado)
-- Asignación de rutas por cada combi
-- Tiempo de llegada a cada paciente
+El programa muestra:
+- **Estado de la solución**: OPTIMAL o FEASIBLE
+- **Valor del flujo máximo**: Valor total en unidades
+- **Distribución del flujo**: Flujo por cada arista de la red
 
-## Archivos del Proyecto
+Ejemplo:
+```
+Status: OPTIMAL
+Maximum Flow Value: 6.0 units
 
-- `combis_pacientes_modelo.py`: Solver para VRP básico
-- `combis_pacientes_modelo_tiempo.py`: Solver para VRPTW (con ventanas de tiempo)
-- `input_combis_pacientes.txt`: Archivo de ejemplo para modelo básico
-- `input_combis_pacientes_tiempo.txt`: Archivo de ejemplo para modelo con tiempo
-- `input_file.txt`: Datos adicionales
-- `requirements.txt`: Dependencias del proyecto
-- `LICENSE`: Licencia del proyecto
-- `README.md`: Este archivo
+Flow distribution by channels:
+  S1_M ---> 5.000000 units
+  S2_M ---> 1.000000 units
+  M_T1 ---> 3.000000 units
+  M_T2 ---> 3.000000 units
+```
 
-## Modelo Matemático
+---
 
-### Variables de Decisión
+## Modelos Matemáticos
 
-- $x_{i,j,k} \in \{0,1\}$: Indica si la combi $k$ viaja de paciente $i$ a paciente $j$
-- $u_{i,k} \in [1, N]$: Variable auxiliar para prevenir subtours (restricción MTZ)
-- $T_{i,k} \geq 0$: Tiempo en que la combi $k$ llega al paciente $i$
+### a) Modelo de Maximización (Una Fuente, Un Destino)
 
-### Función Objetivo
+#### Descripción del Problema
 
-$$\text{Minimizar} \sum_{i,j,k} \text{distancia}_{i,j} \cdot x_{i,j,k}$$
+Dado un grafo dirigido con un nodo origen (source), un nodo destino (sink) y aristas dirigidas con capacidades máximas, encontrar el flujo máximo que puede transportarse desde el origen al destino respetando las restricciones de capacidad.
 
-### Restricciones Principales
+#### Variables de Decisión
 
-1. **Visita única por paciente:**
+- $x_{u,v} \geq 0$: Flujo en la arista dirigida $(u, v)$, restringido a $0 \leq x_{u,v} \leq \text{cap}(u,v)$
+- $F \geq 0$: Flujo total desde origen a destino
+
+#### Función Objetivo
+
+$$\text{Maximizar} \quad F$$
+
+#### Restricciones
+
+1. **Conservación de flujo en origen:**
+   $$\sum_{(s, v)} x_{s,v} = F$$
+
+2. **Conservación de flujo en destino:**
+   $$\sum_{(u, t)} x_{u,t} = F$$
+
+3. **Conservación de flujo en nodos intermedios:**
+   $$\sum_{(u, i)} x_{u,i} = \sum_{(i, v)} x_{i,v} \quad \forall i \notin \{s, t\}$$
+
+4. **Restricciones de capacidad:**
+   $$0 \leq x_{u,v} \leq \text{cap}(u,v) \quad \forall (u,v) \in E$$
+
+---
+
+### b) Modelo de Múltiples Fuentes y Destinos
+
+#### Descripción del Problema
+
+Generalización del problema anterior donde existen múltiples nodos origen ($S = \{s_1, s_2, \ldots, s_k\}$) y múltiples nodos destino ($T = \{t_1, t_2, \ldots, t_m\}$). El objetivo es maximizar el flujo total desde cualquier origen a cualquier destino.
+
+#### Reducción a Forma Clásica
+
+Este problema se resuelve mediante la introducción de:
+- **Super-source** $\sigma$: conectado a todas las fuentes con capacidad infinita
+- **Super-sink** $\tau$: conectado desde todos los destinos con capacidad infinita
+
+#### Variables de Decisión
+
+- $x_{u,v}$: Flujo en cada arista (incluyendo aristas del super-source y super-sink)
+- $F$: Flujo total que emerge de la super-source
+
+#### Función Objetivo
+
+$$\text{Maximizar} \quad F$$
+
+#### Restricciones Extendidas
+
+1. **Balance en super-source:**
+   $$\sum_{s \in S} x_{\sigma,s} = F$$
+
+2. **Balance en super-sink:**
+   $$\sum_{t \in T} x_{t,\tau} = F$$
+
+3. **Conservación en todos los nodos intermedios:**
+   $$\sum_{(u, v)} x_{u,v} = \sum_{(v, w)} x_{v,w} \quad \forall v \in V$$
+
+4. **Capacidades originales en aristas de red:**
+   $$x_{u,v} \leq \text{cap}(u,v) \quad \forall (u,v) \in E$$
+
+#### Ejemplo Resuelto
+
+Para `multi_st.txt`:
+- Super-source conecta a S1 y S2
+- Super-sink recibe desde T1 y T2
+- Flujo máximo = 6 unidades: min(cap(s1→m) + cap(s2→m), cap(m→t1) + cap(m→t2)) = min(10, 6) = 6
+
+---
+
+### c) Modelo de Centros y Pacientes (VRP)
+
+#### Descripción del Problema
+
+Optimizar el ruteo de un conjunto de vehículos (combis) para visitar a pacientes, minimizando el costo total (tiempo o distancia), sujeto a restricciones de capacidad y opcionalmente ventanas de tiempo.
+
+#### Variables de Decisión
+
+- $x_{i,j,k} \in \{0,1\}$: Indica si la combi $k$ viaja de nodo $i$ a nodo $j$
+- $u_{i,k} \in [1, n]$: Variable auxiliar MTZ (Miller-Tucker-Zemlin) para prevenir subtours
+- $T_{i,k} \geq 0$: Hora de llegada de la combi $k$ al nodo $i$ (solo en VRPTW)
+
+#### Función Objetivo
+
+$$\text{Minimizar} \quad \sum_{i,j,k} d_{i,j} \cdot x_{i,j,k}$$
+
+donde $d_{i,j}$ es la distancia o tiempo entre nodos.
+
+#### Restricciones
+
+1. **Cada paciente es visitado exactamente una vez:**
    $$\sum_{i,k} x_{i,j,k} = 1 \quad \forall j \in \text{Pacientes}$$
 
-2. **Conservación de flujo:**
+2. **Conservación de flujo (continuidad de rutas):**
    $$\sum_{i} x_{i,p,k} = \sum_{j} x_{p,j,k} \quad \forall p, k$$
 
-3. **Capacidad de la combi:**
-   $$\text{Pasajeros asignados a } k \leq \text{capacidad}_k$$
+3. **Restricción de capacidad:**
+   $$\sum_{j=1}^{n} x_{i,j,k} \leq \text{capacidad}_k \quad \forall k$$
 
-4. **Eliminación de subtours (restricción MTZ):**
-   $$u_{i,k} - u_{j,k} + N \cdot x_{i,j,k} \leq N - 1$$
+4. **Eliminación de subtours (MTZ):**
+   $$u_{i,k} - u_{j,k} + n \cdot x_{i,j,k} \leq n - 1 \quad \forall i,j,k$$
 
-## Notas
+5. **Ventanas de tiempo (VRPTW):**
+   $$\text{inicio}_i \leq T_{i,k} \leq \text{fin}_i \quad \forall i,k$$
+   $$T_{j,k} \geq T_{i,k} + d_{i,j} - M(1 - x_{i,j,k}) \quad \forall i,j,k$$
 
-- El optimizador utiliza SCIP como backend
-- La tolerancia temporal permite cierta flexibilidad en las ventanas de tiempo
-- El nodo 0 siempre representa el centro de origen y destino final
-- Ambas combis deben retornar al centro después de completar sus rutas
+---
+
+## Notas Técnicas
+
+- El optimizador utiliza **SCIP** (Solving Constraint Integer Programs) como backend
+- Las soluciones se redondean a 6 decimales para legibilidad
+- Se ignoran flujos menores a 1e-6 (considerados cero numérico)
+- Para el problema de múltiples fuentes/destinos, la capacidad de super-source/super-sink se establece como la suma de capacidades salientes totales (Big-M)
+- El tiempo de ejecución es generalmente muy rápido (< 1 segundo) para instancias pequeñas y medianas
