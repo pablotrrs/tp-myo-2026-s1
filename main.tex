@@ -203,9 +203,11 @@ Problema de optimizar rutas de distribución donde un conjunto de vehículos deb
 \begin{itemize}
     \item $n$: Número total de nodos (incluyendo el depósito)
     \item $k$: Número de vehículos disponibles
-    \item $d_{i,j}$: Distancia entre el nodo $i$ y el nodo $j$
+    \item $d_{i,j}$: Distancia (o tiempo) entre el nodo $i$ y el nodo $j$
     \item $\text{cap}_k$: Capacidad máxima del vehículo $k$
-    \item $\text{inicio}_i, \text{fin}_i$: Ventana de tiempo para visitar el nodo $i$ (en problema VRPTW)
+    \item $\text{turno}_i$: Hora de turno para visitar el nodo $i$
+    \item $\text{tolerancia}$: Margen de tolerancia antes del turno (ventana de tiempo)
+    \item $M$: Constante Big-M (horizonte temporal máximo)
 \end{itemize}
 
 \subsubsection*{Variables de Decisión}
@@ -213,7 +215,7 @@ Problema de optimizar rutas de distribución donde un conjunto de vehículos deb
 \begin{itemize}
     \item $x_{i,j,k} \in \{0,1\}$: Variable binaria que indica si el vehículo $k$ viaja directamente del nodo $i$ al nodo $j$
     \item $u_{i,k} \in [1,n]$: Variable auxiliar para prevenir subtours
-    \item $T_{i,k} \geq 0$: Tiempo de llegada del vehículo $k$ al nodo $i$
+    \item $T_{i,k} \geq 0$: Tiempo de llegada (o inicio de servicio) del vehículo $k$ al nodo $i$
 \end{itemize}
 
 \begin{align*}
@@ -223,7 +225,9 @@ Problema de optimizar rutas de distribución donde un conjunto de vehículos deb
     & \sum_{i} x_{i,p,k} = \sum_{j} x_{p,j,k} \quad \forall p, k \\
     & \sum_{j: j \ne i} x_{i,j,k} \leq \text{cap}_k \quad \forall i,k \\
     & u_{i,k} - u_{j,k} + n \cdot x_{i,j,k} \leq n - 1 \quad \forall i,j,k \\
-    & T_{i,k} \in [\text{inicio}_i, \text{fin}_i] \quad \forall i,k \quad \text{(VRPTW)} \\
+    & T_{j,k} \geq T_{i,k} + d_{i,j} - M(1 - x_{i,j,k}) \quad \forall i,j,k, \, j \ne 0 \\
+    & T_{i,k} \geq (\text{turno}_i - \text{tolerancia}) \cdot y_{i,k} \quad \forall i,k \\
+    & T_{i,k} \leq \text{turno}_i \cdot y_{i,k} + M(1 - y_{i,k}) \quad \forall i,k \\
     & x_{i,j,k} \in \{0,1\}, \quad u_{i,k} \geq 1
 \end{align*}
 
@@ -240,10 +244,18 @@ Minimizar la distancia total recorrida por todos los vehículos:
 
 \begin{itemize}
     \item Restricción 1: Cada cliente debe ser visitado exactamente una vez
+    
     \item Restricción 2: Conservación de flujo en cada nodo (si un vehículo llega, debe partir)
+    
     \item Restricción 3: Capacidad máxima de cada vehículo
+    
     \item Restricción 4: Prevención de subtours (ciclos desconectados)
-    \item Restricción 5: Restricción de ventanas de tiempo para VRPTW (opcional)
+    
+    \item Restricción 5 (Propagación del Tiempo): Si el vehículo $k$ viaja de $i$ a $j$, entonces el tiempo de llegada en $j$ debe ser al menos el tiempo en $i$ más el tiempo de viaje. Esta restricción evita que el vehículo viaje al pasado.
+    
+    \item Restricción 6 (Ventana de Tiempo - Límite Inferior): El tiempo de servicio debe ser al menos $(\text{turno}_i - \text{tolerancia})$ si el vehículo atiende al nodo $i$
+    
+    \item Restricción 7 (Ventana de Tiempo - Límite Superior): El tiempo de servicio no puede exceder $\text{turno}_i$ si el vehículo atiende al nodo $i$
 \end{itemize}
 
 \end{document}
