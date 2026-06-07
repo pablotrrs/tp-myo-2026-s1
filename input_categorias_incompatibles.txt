@@ -1,0 +1,6 @@
+# Pares de categorías incompatibles (Categoría1, Categoría2)
+# Una combi no puede transportar pacientes de ambas categorías simultáneamente
+# Nota: Si Categoría1 == Categoría2, la combi puede transportar MÁXIMO 1 paciente de esa categoría
+Contagiosos, Mentales
+Contagiosos, PAMI
+Contagiosos, Contagiosos

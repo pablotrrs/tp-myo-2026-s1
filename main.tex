@@ -64,15 +64,17 @@
 
 \section{Introducción}
 
-En este trabajo práctico se desarrolla un solver eficiente para resolver problemas de flujo máximo en redes dirigidas. El proyecto implementa una solución general que puede manejar:
+En este trabajo práctico se desarrolla un solver eficiente para resolver problemas de flujo máximo en redes dirigidas y problemas de ruteo de vehículos. El proyecto implementa una solución general que puede manejar:
 
 \begin{itemize}
     \item \textbf{Flujo máximo clásico}: Con una única fuente y un único destino
     \item \textbf{Múltiples fuentes y destinos}: Mediante reducción a forma clásica
-    \item \textbf{Problemas de distribución}: Como el modelo de centros y pacientes (VRP)
+    \item \textbf{Ruteo de vehículos (VRP)}: Minimizando distancia con restricciones de capacidad
+    \item \textbf{Ruteo con ventanas de tiempo (VRPTW)}: Agregando restricciones temporales
+    \item \textbf{Ruteo con categorías incompatibles}: Incorporando restricciones de categorías de pacientes
 \end{itemize}
 
-El problema de flujo máximo es un clásico en teoría de grafos y optimización combinatoria, con múltiples aplicaciones en la práctica: desde redes de comunicación hasta distribución de recursos.
+El problema de flujo máximo es un clásico en teoría de grafos y optimización combinatoria, con múltiples aplicaciones en la práctica: desde redes de comunicación hasta distribución de recursos. Los problemas de ruteo de vehículos son fundamentales en logística y transporte, permitiendo optimizar la asignación de rutas bajo diversas restricciones operacionales.
 
 \newpage
 \section{Formulación Matemática}
@@ -194,7 +196,7 @@ Maximizar el flujo total que puede transportarse desde cualquier fuente hacia cu
 
 \subsubsection{Descripción del Problema}
 
-Problema de optimizar rutas de distribución donde un conjunto de vehículos debe visitar clientes (en nuestro caso, pacientes) desde un centro de distribución. El objetivo es minimizar la distancia total recorrida, respetando la capacidad de cada vehículo y visitando cada cliente exactamente una vez.
+Problema de optimizar rutas de distribución donde un conjunto de vehículos debe visitar pacientes desde un centro de distribución. El objetivo es minimizar la distancia total recorrida, respetando la capacidad de cada vehículo y visitando cada paciente exactamente una vez.
 
 \subsubsection{Modelo Matemático}
 
@@ -215,20 +217,22 @@ Problema de optimizar rutas de distribución donde un conjunto de vehículos deb
 \begin{itemize}
     \item $x_{i,j,k} \in \{0,1\}$: Variable binaria que indica si el vehículo $k$ viaja directamente del nodo $i$ al nodo $j$
     \item $u_{i,k} \in [1,n]$: Variable auxiliar para prevenir subtours
+    \item $z_{i,k} \in \{0,1\}$: Variable binaria que indica si el vehículo $k$ atiende al paciente $i$
     \item $T_{i,k} \geq 0$: Tiempo de llegada (o inicio de servicio) del vehículo $k$ al nodo $i$
 \end{itemize}
 
 \begin{align*}
   \min & \quad \sum_{i,j,k} d_{i,j} \cdot x_{i,j,k} \\
   \text{s.a.} \quad
-    & \sum_{i,k} x_{i,j,k} = 1 \quad \forall j \in \text{Clientes} \\
+    & \sum_{i,k} x_{i,j,k} = 1 \quad \forall j \in \text{Pacientes} \\
     & \sum_{i} x_{i,p,k} = \sum_{j} x_{p,j,k} \quad \forall p, k \\
     & \sum_{j: j \ne i} x_{i,j,k} \leq \text{cap}_k \quad \forall i,k \\
     & u_{i,k} - u_{j,k} + n \cdot x_{i,j,k} \leq n - 1 \quad \forall i,j,k \\
+    & z_{i,k} = \sum_{j: j \ne i} x_{j,i,k} \quad \forall i,k \\
     & T_{j,k} \geq T_{i,k} + d_{i,j} - M(1 - x_{i,j,k}) \quad \forall i,j,k, \, j \ne 0 \\
-    & T_{i,k} \geq (\text{turno}_i - \text{tolerancia}) \cdot y_{i,k} \quad \forall i,k \\
-    & T_{i,k} \leq \text{turno}_i \cdot y_{i,k} + M(1 - y_{i,k}) \quad \forall i,k \\
-    & x_{i,j,k} \in \{0,1\}, \quad u_{i,k} \geq 1
+    & T_{i,k} \geq (\text{turno}_i - \text{tolerancia}) \cdot z_{i,k} \quad \forall i,k \\
+    & T_{i,k} \leq \text{turno}_i \cdot z_{i,k} + M(1 - z_{i,k}) \quad \forall i,k \\
+    & x_{i,j,k} \in \{0,1\}, \quad u_{i,k} \geq 1, \quad z_{i,k} \in \{0,1\}
 \end{align*}
 
 \subsubsection{Explicación del Modelo}
@@ -243,7 +247,7 @@ Minimizar la distancia total recorrida por todos los vehículos:
 \subsubsection*{Restricciones}
 
 \begin{itemize}
-    \item Restricción 1: Cada cliente debe ser visitado exactamente una vez
+    \item Restricción 1: Cada paciente debe ser visitado exactamente una vez
     
     \item Restricción 2: Conservación de flujo en cada nodo (si un vehículo llega, debe partir)
     
@@ -251,11 +255,113 @@ Minimizar la distancia total recorrida por todos los vehículos:
     
     \item Restricción 4: Prevención de subtours (ciclos desconectados)
     
-    \item Restricción 5 (Propagación del Tiempo): Si el vehículo $k$ viaja de $i$ a $j$, entonces el tiempo de llegada en $j$ debe ser al menos el tiempo en $i$ más el tiempo de viaje. Esta restricción evita que el vehículo viaje al pasado.
+    \item Restricción 5 (Definición de Atención al Paciente): La variable $z_{i,k} = 1$ si y solo si el vehículo $k$ atiende al paciente $i$ (existe exactamente una arista de entrada):
+    \[
+    z_{i,k} = \sum_{j: j \ne i} x_{j,i,k} \quad \forall i,k
+    \]
+    Esta igualdad vincula la variable binaria $z_{i,k}$ con las decisiones de ruteo. Dado que cada paciente es visitado exactamente una vez (Restricción 1), esta suma es 0 o 1, garantizando que $z_{i,k}$ es binaria.
     
-    \item Restricción 6 (Ventana de Tiempo - Límite Inferior): El tiempo de servicio debe ser al menos $(\text{turno}_i - \text{tolerancia})$ si el vehículo atiende al nodo $i$
+    \item Restricción 6 (Propagación del Tiempo): Si el vehículo $k$ viaja de $i$ a $j$, entonces el tiempo de llegada en $j$ debe ser al menos el tiempo en $i$ más el tiempo de viaje. Esta restricción evita que el vehículo viaje al pasado.
     
-    \item Restricción 7 (Ventana de Tiempo - Límite Superior): El tiempo de servicio no puede exceder $\text{turno}_i$ si el vehículo atiende al nodo $i$
+    \item Restricción 7 (Ventana de Tiempo - Límite Inferior): El tiempo de servicio debe ser al menos $(\text{turno}_i - \text{tolerancia})$ si el vehículo atiende al nodo $i$
+    
+    \item Restricción 8 (Ventana de Tiempo - Límite Superior): El tiempo de servicio no puede exceder $\text{turno}_i$ si el vehículo atiende al nodo $i$
+\end{itemize}
+
+\subsection{Modelo 4: Ruteo de Vehículos con Restricciones de Categorías}
+
+\subsubsection{Descripción del Problema}
+
+Extensión del problema VRP donde cada paciente pertenece a exactamente una categoría (PAMI, Contagiosos, Mentales, etc.). Existe un conjunto de pares de categorías incompatibles, lo que significa que una misma combi no puede transportar pacientes de ambas categorías simultáneamente. El objetivo es minimizar la distancia total recorrida, respetando la capacidad de cada vehículo, visitando cada paciente exactamente una vez, y cumpliendo todas las restricciones de categorías incompatibles.
+
+\subsubsection{Modelo Matemático}
+
+\subsubsection*{Constantes}
+
+\begin{itemize}
+    \item $n$: Número total de nodos (incluyendo el depósito)
+    \item $k$: Número de vehículos disponibles
+    \item $d_{i,j}$: Distancia (o tiempo) entre el nodo $i$ y el nodo $j$
+    \item $\text{cap}_k$: Capacidad máxima del vehículo $k$
+    \item $\text{turno}_i$: Hora de turno para visitar el nodo $i$
+    \item $\text{tolerancia}$: Margen de tolerancia antes del turno (ventana de tiempo)
+    \item $\text{cat}_i$: Categoría a la que pertenece el paciente $i$
+    \item $\text{Incompatibles}$: Conjunto de pares de categorías $(c_1, c_2)$ que no pueden estar juntas en una combi
+    \item $M$: Constante Big-M (horizonte temporal máximo)
+\end{itemize}
+
+\subsubsection*{Variables de Decisión}
+
+\begin{itemize}
+    \item $x_{i,j,k} \in \{0,1\}$: Variable binaria que indica si el vehículo $k$ viaja directamente del nodo $i$ al nodo $j$
+    \item $u_{i,k} \in [1,n]$: Variable auxiliar para prevenir subtours
+    \item $z_{i,k} \in \{0,1\}$: Variable binaria que indica si el vehículo $k$ atiende al paciente $i$
+    \item $T_{i,k} \geq 0$: Tiempo de llegada (o inicio de servicio) del vehículo $k$ al nodo $i$
+    \item $y_{c,k} \in \{0,1\}$: Variable binaria que indica si la combi $k$ atiende a algún paciente de la categoría $c$
+\end{itemize}
+
+\begin{align*}
+  \min & \quad \sum_{i,j,k} d_{i,j} \cdot x_{i,j,k} \\
+  \text{s.a.} \quad
+    & \sum_{i,k} x_{i,j,k} = 1 \quad \forall j \in \text{Pacientes} \\
+    & \sum_{i} x_{i,p,k} = \sum_{j} x_{p,j,k} \quad \forall p, k \\
+    & \sum_{j: j \ne i} x_{i,j,k} \leq \text{cap}_k \quad \forall i,k \\
+    & u_{i,k} - u_{j,k} + n \cdot x_{i,j,k} \leq n - 1 \quad \forall i,j,k \\
+    & z_{i,k} = \sum_{j: j \ne i} x_{j,i,k} \quad \forall i,k \\
+    & T_{j,k} \geq T_{i,k} + d_{i,j} - M(1 - x_{i,j,k}) \quad \forall i,j,k, \, j \ne 0 \\
+    & T_{i,k} \geq (\text{turno}_i - \text{tolerancia}) \cdot z_{i,k} \quad \forall i,k \\
+    & T_{i,k} \leq \text{turno}_i \cdot z_{i,k} + M(1 - z_{i,k}) \quad \forall i,k \\
+    & y_{c,k} \geq \sum_{i: \text{cat}_i = c} z_{i,k} \quad \forall c,k \\
+    & y_{c_1,k} + y_{c_2,k} \leq 1 \quad \forall (c_1,c_2) \in \text{Incompatibles}, \, \forall k \\
+    & x_{i,j,k} \in \{0,1\}, \quad u_{i,k} \geq 1, \quad z_{i,k} \in \{0,1\}
+\end{align*}
+
+\subsubsection{Explicación del Modelo}
+
+\subsubsection*{Función Objetivo}
+
+Minimizar la distancia total recorrida por todos los vehículos:
+\[
+\text{Minimizar} \quad \sum_{i,j,k} d_{i,j} \cdot x_{i,j,k}
+\]
+
+\subsubsection*{Restricciones}
+
+\begin{itemize}
+    \item Restricción 1: Cada paciente debe ser visitado exactamente una vez
+    
+    \item Restricción 2: Conservación de flujo en cada nodo (si un vehículo llega, debe partir)
+    
+    \item Restricción 3: Capacidad máxima de cada vehículo
+    
+    \item Restricción 4: Prevención de subtours (ciclos desconectados)
+    
+    \item Restricción 5 (Definición de Atención al Paciente): La variable $z_{i,k} = 1$ si y solo si el vehículo $k$ atiende al paciente $i$ (existe exactamente una arista de entrada):
+    \[
+    z_{i,k} = \sum_{j: j \ne i} x_{j,i,k} \quad \forall i,k
+    \]
+    Esta igualdad vincula la variable binaria $z_{i,k}$ con las decisiones de ruteo. Dado que cada paciente es visitado exactamente una vez (Restricción 1), esta suma es 0 o 1, garantizando que $z_{i,k}$ es binaria.
+    
+    \item Restricción 6 (Propagación del Tiempo): Si el vehículo $k$ viaja de $i$ a $j$, entonces el tiempo de llegada en $j$ debe ser al menos el tiempo en $i$ más el tiempo de viaje
+    
+    \item Restricción 7 (Ventana de Tiempo - Límite Inferior): El tiempo de servicio debe ser al menos $(\text{turno}_i - \text{tolerancia})$ si el vehículo atiende al nodo $i$
+    
+    \item Restricción 8 (Ventana de Tiempo - Límite Superior): El tiempo de servicio no puede exceder $\text{turno}_i$ si el vehículo atiende al nodo $i$
+    
+    \item Restricción 9 (Definición de Categoría en Combi): La variable $y_{c,k}$ vale 1 si la combi $k$ atiende a algún paciente de la categoría $c$. Esta restricción asegura que $y_{c,k}$ sea mayor o igual a cualquier paciente de categoría $c$ que la combi atienda
+    
+    \item Restricción 10 (Incompatibilidad de Categorías): Existen dos casos:
+    \begin{itemize}
+        \item \textbf{Incompatibilidad no reflexiva} $(c_1, c_2)$ con $c_1 \ne c_2$: La combi $k$ no puede tener simultáneamente pacientes de ambas categorías:
+        \[
+        y_{c_1,k} + y_{c_2,k} \leq 1
+        \]
+        \item \textbf{Incompatibilidad reflexiva} $(c, c)$: La combi $k$ puede transportar a lo máximo 1 paciente de la categoría $c$:
+        \[
+        \sum_{i: \text{cat}_i = c} z_{i,k} \leq 1
+        \]
+        donde $z_{i,k}$ indica si el vehículo $k$ atiende al paciente $i$ de categoría $c$
+    \end{itemize}
 \end{itemize}
 
 \end{document}
