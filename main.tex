@@ -391,7 +391,7 @@ Problema de optimización donde se debe seleccionar exactamente un vehículo (co
 
 \begin{itemize}
     \item $x_{i,j,k} \in \{0,1\}$: Variable binaria que indica si el vehículo $k$ viaja directamente del nodo $i$ al nodo $j$
-    \item $z_{p,k} \in \{0,1\}$: Variable binaria que indica si el vehículo $k$ atiende al paciente $p$ (definida como $z_{p,k} = \sum_{j: j \ne p} x_{j,p,k}$)
+    \item $z_{i,k} \in \{0,1\}$: Variable binaria que indica si el vehículo $k$ atiende al paciente $i$ (definida como $z_{i,k} = \sum_{j: j \ne i} x_{j,i,k}$)
     \item $w_k \in \{0,1\}$: Variable binaria que indica si el vehículo $k$ es elegido (exactamente uno debe ser 1)
     \item $u_{i,k} \in [1,n]$: Variable auxiliar para prevenir subtours
     \item $T_{i,k} \geq 0$: Tiempo de llegada (o inicio de servicio) del vehículo $k$ al nodo $i$
@@ -403,14 +403,14 @@ Problema de optimización donde se debe seleccionar exactamente un vehículo (co
     & \sum_{k=1}^{K} w_k = 1 \\
     & \sum_{j: j \ne i} x_{0,j,k} = w_k \quad \forall k \\
     & \sum_{i: i \ne 0} x_{i,0,k} = w_k \quad \forall k \\
-    & z_{p,k} = \sum_{j: j \ne p} x_{j,p,k} \quad \forall p,k \\
-    & \sum_{p=1}^{n} z_{p,k} \leq \text{cap}_k \cdot w_k \quad \forall k \\
-    & \sum_{j: j \ne p} x_{p,j,k} = z_{p,k} \quad \forall p,k \\
+    & z_{i,k} = \sum_{j: j \ne i} x_{j,i,k} \quad \forall i,k \\
+    & \sum_{i=1}^{n} z_{i,k} \leq \text{cap}_k \cdot w_k \quad \forall k \\
+    & \sum_{j: j \ne i} x_{i,j,k} = z_{i,k} \quad \forall i,k \\
     & u_{i,k} - u_{j,k} + n \cdot x_{i,j,k} \leq n - 1 \quad \forall i,j,k \\
     & T_{j,k} \geq T_{i,k} + d_{i,j} - M(1 - x_{i,j,k}) \quad \forall i,j,k, \, j \ne 0 \\
-    & T_{p,k} \geq (\text{turno}_p - \text{tolerancia}) \cdot z_{p,k} \quad \forall p,k \\
-    & T_{p,k} \leq \text{turno}_p \cdot z_{p,k} + M(1 - z_{p,k}) \quad \forall p,k \\
-    & x_{i,j,k} \in \{0,1\}, \quad z_{p,k} \in \{0,1\}, \quad w_k \in \{0,1\}, \quad u_{i,k} \geq 1
+    & T_{i,k} \geq (\text{turno}_i - \text{tolerancia}) \cdot z_{i,k} \quad \forall i,k \\
+    & T_{i,k} \leq \text{turno}_i \cdot z_{i,k} + M(1 - z_{i,k}) \quad \forall i,k \\
+    & x_{i,j,k} \in \{0,1\}, \quad z_{i,k} \in \{0,1\}, \quad w_k \in \{0,1\}, \quad u_{i,k} \geq 1
 \end{align*}
 
 \subsubsection{Explicación del Modelo}
