@@ -72,9 +72,10 @@ En este trabajo práctico se desarrolla un solver eficiente para resolver proble
     \item \textbf{Ruteo de vehículos (VRP)}: Minimizando distancia con restricciones de capacidad
     \item \textbf{Ruteo con ventanas de tiempo (VRPTW)}: Agregando restricciones temporales
     \item \textbf{Ruteo con categorías incompatibles}: Incorporando restricciones de categorías de pacientes
+    \item \textbf{Problema de Orienteering (VRP con beneficios)}: Seleccionando un vehículo y ruta para maximizar beneficios totales
 \end{itemize}
 
-El problema de flujo máximo es un clásico en teoría de grafos y optimización combinatoria, con múltiples aplicaciones en la práctica: desde redes de comunicación hasta distribución de recursos. Los problemas de ruteo de vehículos son fundamentales en logística y transporte, permitiendo optimizar la asignación de rutas bajo diversas restricciones operacionales.
+El problema de flujo máximo es un clásico en teoría de grafos y optimización combinatoria, con múltiples aplicaciones en la práctica: desde redes de comunicación hasta distribución de recursos. Los problemas de ruteo de vehículos son fundamentales en logística y transporte, permitiendo optimizar la asignación de rutas bajo diversas restricciones operacionales. El problema de Orienteering agrega la dimensión de maximización de beneficios con selección de vehículo único.
 
 \newpage
 \section{Formulación Matemática}
@@ -364,4 +365,87 @@ Minimizar la distancia total recorrida por todos los vehículos:
     \end{itemize}
 \end{itemize}
 
+\subsection{Modelo 5: Ruteo de Vehículos con Maximización de Beneficios}
+
+\subsubsection{Descripción del Problema}
+
+Problema de optimización donde se debe seleccionar exactamente un vehículo (combi) y una ruta para ese vehículo, maximizando los beneficios totales. Los beneficios provienen de dos fuentes: (i) los pacientes visitados, donde cada paciente tiene un beneficio asociado, y (ii) el coeficiente de deseabilidad del vehículo elegido. El modelo incluye restricciones de ventanas de tiempo y capacidad, pero permite visitar un subconjunto de pacientes (a diferencia de VRP clásico donde todos deben ser visitados).
+
+\subsubsection{Modelo Matemático}
+
+\subsubsection*{Constantes}
+
+\begin{itemize}
+    \item $n$: Número total de nodos (incluyendo el depósito)
+    \item $K$: Número de vehículos disponibles
+    \item $d_{i,j}$: Distancia (o tiempo) entre el nodo $i$ y el nodo $j$
+    \item $\text{cap}_k$: Capacidad máxima del vehículo $k$
+    \item $\text{turno}_i$: Hora de turno para visitar el nodo $i$
+    \item $\text{tolerancia}$: Margen de tolerancia antes del turno (ventana de tiempo)
+    \item $\text{ben}_i$: Beneficio de visitar al paciente $i$
+    \item $\text{coef}_k$: Coeficiente de deseabilidad del vehículo $k$
+    \item $M$: Constante Big-M (horizonte temporal máximo)
+\end{itemize}
+
+\subsubsection*{Variables de Decisión}
+
+\begin{itemize}
+    \item $x_{i,j,k} \in \{0,1\}$: Variable binaria que indica si el vehículo $k$ viaja directamente del nodo $i$ al nodo $j$
+    \item $z_{p,k} \in \{0,1\}$: Variable binaria que indica si el vehículo $k$ atiende al paciente $p$ (definida como $z_{p,k} = \sum_{j: j \ne p} x_{j,p,k}$)
+    \item $w_k \in \{0,1\}$: Variable binaria que indica si el vehículo $k$ es elegido (exactamente uno debe ser 1)
+    \item $u_{i,k} \in [1,n]$: Variable auxiliar para prevenir subtours
+    \item $T_{i,k} \geq 0$: Tiempo de llegada (o inicio de servicio) del vehículo $k$ al nodo $i$
+\end{itemize}
+
+\begin{align*}
+  \max & \quad \sum_{i,K} \text{ben}_i \cdot z_{i,k} + \sum_{k=1}^{K} \text{coef}_k \cdot w_k \\
+  \text{s.a.} \quad
+    & \sum_{k=1}^{K} w_k = 1 \\
+    & \sum_{j: j \ne i} x_{0,j,k} = w_k \quad \forall k \\
+    & \sum_{i: i \ne 0} x_{i,0,k} = w_k \quad \forall k \\
+    & z_{p,k} = \sum_{j: j \ne p} x_{j,p,k} \quad \forall p,k \\
+    & \sum_{p=1}^{n} z_{p,k} \leq \text{cap}_k \cdot w_k \quad \forall k \\
+    & \sum_{j: j \ne p} x_{p,j,k} = z_{p,k} \quad \forall p,k \\
+    & u_{i,k} - u_{j,k} + n \cdot x_{i,j,k} \leq n - 1 \quad \forall i,j,k \\
+    & T_{j,k} \geq T_{i,k} + d_{i,j} - M(1 - x_{i,j,k}) \quad \forall i,j,k, \, j \ne 0 \\
+    & T_{p,k} \geq (\text{turno}_p - \text{tolerancia}) \cdot z_{p,k} \quad \forall p,k \\
+    & T_{p,k} \leq \text{turno}_p \cdot z_{p,k} + M(1 - z_{p,k}) \quad \forall p,k \\
+    & x_{i,j,k} \in \{0,1\}, \quad z_{p,k} \in \{0,1\}, \quad w_k \in \{0,1\}, \quad u_{i,k} \geq 1
+\end{align*}
+
+\subsubsection{Explicación del Modelo}
+
+\subsubsection*{Función Objetivo}
+
+Maximizar los beneficios totales: suma de los beneficios de todos los pacientes visitados más el coeficiente de deseabilidad del vehículo elegido:
+\[
+\text{Maximizar} \quad \sum_{i,K} \text{ben}_i \cdot z_{i,k} + \sum_{k=1}^{K} \text{coef}_k \cdot w_k
+\]
+
+\subsubsection*{Restricciones}
+
+\begin{itemize}
+    \item Restricción 1 (Selección Única de Vehículo): Exactamente un vehículo debe ser elegido:
+    $$\sum_{k=1}^{K} w_k = 1$$
+    
+    \item Restricción 2 (Salida del Depósito): El vehículo elegido sale del depósito exactamente una vez:
+    $$\sum_{j: j \ne 0} x_{0,j,k} = w_k \quad \forall k$$
+    
+    \item Restricción 3 (Regreso al Depósito): El vehículo elegido regresa al depósito exactamente una vez:
+    $$\sum_{i: i \ne 0} x_{i,0,k} = w_k \quad \forall k$$
+    
+    \item Restricción 4 (Definición de Atención al Paciente): Similar a modelos anteriores, define si un paciente es atendido:
+    
+    \item Restricción 5 (Capacidad): El número de pacientes visitados no puede exceder la capacidad del vehículo elegido
+    
+    \item Restricción 6 (Conservación de Flujo): Si un paciente es visitado, el vehículo debe entrar y salir del paciente
+    
+    \item Restricción 7 (Eliminación de Subtours): Utiliza la técnica MTZ para evitar ciclos desconectados
+    
+    \item Restricción 8 (Propagación del Tiempo): El tiempo aumenta con los viajes
+    
+    \item Restricción 9 (Ventana de Tiempo - Límite Inferior): El paciente debe ser atendido dentro de su ventana de tiempo (después del tiempo de inicio permitido)
+
+    \item Restricción 10 (Ventana de Tiempo - Límite Superior): El paciente debe ser atendido dentro de su ventana de tiempo (antes del turno)
+\end{itemize}
 \end{document}

@@ -316,6 +316,124 @@ Para el conjunto de datos de ejemplo:
 
 ---
 
+### e) Modelo de Ruteo de Vehículos con Maximización de Beneficios (Orienteering)
+
+#### Descripción del Problema
+
+Problema donde se debe seleccionar exactamente un vehículo (combi) y diseñar una ruta para ese vehículo, maximizando los beneficios totales. Los beneficios provienen de dos fuentes:
+
+1. **Beneficios de pacientes**: Cada paciente tiene un valor asociado si es visitado
+2. **Beneficio del vehículo**: Cada combi tiene un coeficiente de deseabilidad
+
+A diferencia del VRP clásico, no es obligatorio visitar todos los pacientes. El modelo selecciona un subconjunto óptimo de pacientes y el vehículo más ventajoso para maximizar el beneficio total.
+
+Este es el **Problema de Orienteering con Ventanas de Tiempo (OPTW)**, una variante donde el objetivo es maximizar ganancias en lugar de minimizar costos.
+
+#### Variables de Decisión
+
+- $x_{i,j,k} \in \{0,1\}$: Indica si la combi $k$ viaja de nodo $i$ a nodo $j$
+- $z_{p,k} \in \{0,1\}$: Indica si la combi $k$ atiende al paciente $p$
+- $w_k \in \{0,1\}$: **Variable nueva** - Indica si la combi $k$ es elegida (exactamente una = 1)
+- $u_{i,k} \in [1,n]$: Variable auxiliar MTZ para prevenir subtours
+- $T_{i,k} \geq 0$: Hora de llegada de la combi $k$ al nodo $i$
+
+#### Función Objetivo
+
+$$\text{Maximizar} \quad \sum_{i,k} \text{ben}_i \cdot z_{i,k} + \sum_{k} \text{coef}_k \cdot w_k$$
+
+donde:
+- $\text{ben}_i$ = beneficio de visitar paciente $i$
+- $\text{coef}_k$ = coeficiente de deseabilidad de combi $k$
+
+#### Restricciones Principales
+
+1. **Selección única de vehículo:**
+   $$\sum_{k} w_k = 1$$
+   
+2. **Salida del depósito (solo si vehículo elegido):**
+   $$\sum_{j \ne 0} x_{0,j,k} = w_k \quad \forall k$$
+   
+3. **Regreso al depósito (solo si vehículo elegido):**
+   $$\sum_{i \ne 0} x_{i,0,k} = w_k \quad \forall k$$
+   
+4. **Definición de atención:** $z_{i,k} = \sum_{j \ne i} x_{j,i,k}$
+
+5. **Capacidad acoplada con vehículo:**
+   $$\sum_{p} z_{p,k} \leq \text{cap}_k \cdot w_k \quad \forall k$$
+   Si $w_k = 0$, entonces $z_{p,k} = 0$ para todos los pacientes.
+
+6. **Conservación de flujo:** $\sum_{j \ne p} x_{p,j,k} = z_{p,k}$
+
+7. **Eliminación de subtours (MTZ):** $u_{i,k} - u_{j,k} + n \cdot x_{i,j,k} \leq n - 1$
+
+8. **Propagación de tiempo:** $T_{j,k} \geq T_{i,k} + d_{i,j} - M(1 - x_{i,j,k})$
+
+9. **Ventanas de tiempo:** 
+   - $(turno_i - tolerancia) \cdot z_{i,k} \leq T_{i,k}$
+   - $T_{i,k} \leq turno_i \cdot z_{i,k} + M(1 - z_{i,k})$
+
+#### Diferencias Clave con Modelos Anteriores
+
+| Aspecto | VRP (Modelo c) | VRP+Categorías (Modelo d) | Orienteering (Modelo e) |
+|---------|---|---|---|
+| **Objetivo** | Minimizar distancia | Minimizar distancia | **Maximizar beneficios** |
+| **Vehículos usados** | Múltiples (flexible) | Múltiples (flexible) | **Exactamente 1** |
+| **Pacientes visitados** | Todos obligatoriamente | Todos obligatoriamente | **Subconjunto óptimo** |
+| **Variables nuevas** | Ninguna | $y_{c,k}$ (categoría) | **$w_k$ (vehículo elegido)** |
+| **Decisión principal** | ¿Cómo rutear? | ¿Cómo rutear respetando categorías? | **¿Qué vehículo y qué ruta?** |
+
+#### Ejemplo y Validación
+
+**Datos:**
+- 5 pacientes con beneficios: P1(50.5), P2(120), P3(30), P4(200), P5(80)
+- 3 combis con coeficientes: A(100), B(40), VIP(300)
+- Capacidades: A(3), B(5), VIP(2)
+- Ventanas de tiempo: ±10 minutos alrededor del turno
+
+**Solución óptima: 620.0 unidades de beneficio**
+
+```
+Vehículo elegido: Combi_VIP (Coeficiente: 300.0)
+Ruta: Centro (0) → Paciente 4 → Paciente 2 → Centro (0)
+
+Pacientes recogidos: [2, 4]
+Beneficio de pacientes: 120.0 (P2) + 200.0 (P4) = 320.0
+Beneficio de vehículo: 300.0 (Combi_VIP)
+Beneficio total: 620.0
+Capacidad utilizada: 2/2
+```
+
+**Análisis de optimalidad:**
+
+| Combi | Coef. | Cap. | Beneficio máximo teórico | Real óptimo | Razonamiento |
+|------|-------|------|--------------------------|-------------|---|
+| A | 100 | 3 | 550.5 | ❌ | Capacidad suficiente pero tiempo insuficiente |
+| B | 40 | 5 | 490.5 | ❌ | Capacidad máxima pero coef. bajo |
+| **VIP** | **300** | **2** | **620.0** | **✓ ÓPTIMO** | Coef. alto compensa limitada capacidad |
+
+A pesar de tener la menor capacidad, **Combi_VIP es elegida** porque su alto coeficiente de deseabilidad (300) proporciona un beneficio total superior.
+
+#### Ejecución
+
+```bash
+# Ejecutar modelo de Orienteering con beneficios
+python combis_pacientes_con_beneficio/main.py
+
+# O alternativamente, desde el directorio específico
+cd combis_pacientes_con_beneficio
+python main.py
+```
+
+#### Archivos Relacionados
+
+| Archivo | Descripción |
+|---------|-------------|
+| `combis_pacientes_con_beneficio/combis_pacientes_con_beneficio.py` | Implementación del solver Orienteering |
+| `combis_pacientes_con_beneficio/lector_datos_beneficios.py` | Parser para archivos de entrada |
+| `combis_pacientes_con_beneficio/input_combis_beneficios.txt` | Archivo de datos de ejemplo |
+
+---
+
 
 
 - El optimizador utiliza **SCIP** (Solving Constraint Integer Programs) como backend
