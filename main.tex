@@ -204,7 +204,7 @@ Problema de optimizar rutas de distribución donde un conjunto de vehículos deb
 \subsubsection*{Constantes}
 
 \begin{itemize}
-    \item $n$: Número total de nodos (incluyendo el depósito)
+    \item $n$: Número total de nodos (incluyendo el centro)
     \item $k$: Número de vehículos disponibles
     \item $d_{i,j}$: Distancia (o tiempo) entre el nodo $i$ y el nodo $j$
     \item $\text{cap}_k$: Capacidad máxima del vehículo $k$
@@ -280,7 +280,7 @@ Extensión del problema VRP donde cada paciente pertenece a exactamente una cate
 \subsubsection*{Constantes}
 
 \begin{itemize}
-    \item $n$: Número total de nodos (incluyendo el depósito)
+    \item $n$: Número total de nodos (incluyendo el centro)
     \item $k$: Número de vehículos disponibles
     \item $d_{i,j}$: Distancia (o tiempo) entre el nodo $i$ y el nodo $j$
     \item $\text{cap}_k$: Capacidad máxima del vehículo $k$
@@ -376,7 +376,7 @@ Problema de optimización donde se debe seleccionar exactamente un vehículo (co
 \subsubsection*{Constantes}
 
 \begin{itemize}
-    \item $n$: Número total de nodos (incluyendo el depósito)
+    \item $n$: Número total de nodos (incluyendo el centro)
     \item $K$: Número de vehículos disponibles
     \item $d_{i,j}$: Distancia (o tiempo) entre el nodo $i$ y el nodo $j$
     \item $\text{cap}_k$: Capacidad máxima del vehículo $k$
@@ -428,24 +428,31 @@ Maximizar los beneficios totales: suma de los beneficios de todos los pacientes 
     \item Restricción 1 (Selección Única de Vehículo): Exactamente un vehículo debe ser elegido:
     $$\sum_{k=1}^{K} w_k = 1$$
     
-    \item Restricción 2 (Salida del Depósito): El vehículo elegido sale del depósito exactamente una vez:
+    \item Restricción 2 (Salida del centro): El vehículo elegido sale del centro médico exactamente una vez:
     $$\sum_{j: j \ne 0} x_{0,j,k} = w_k \quad \forall k$$
     
-    \item Restricción 3 (Regreso al Depósito): El vehículo elegido regresa al depósito exactamente una vez:
+    \item Restricción 3 (Regreso al centro): El vehículo elegido regresa al centro médico exactamente una vez:
     $$\sum_{i: i \ne 0} x_{i,0,k} = w_k \quad \forall k$$
     
     \item Restricción 4 (Definición de Atención al Paciente): Similar a modelos anteriores, define si un paciente es atendido:
+    $$z_{i,k} = \sum_{j: j \ne i} x_{j,i,k} \quad \forall i,k$$
     
-    \item Restricción 5 (Capacidad): El número de pacientes visitados no puede exceder la capacidad del vehículo elegido
+    \item Restricción 5 (Capacidad): El número de pacientes visitados no puede exceder la capacidad del vehículo elegido:
+    $$\sum_{i=1}^{n} z_{i,k} \leq \text{cap}_k \cdot w_k \quad \forall k$$
     
-    \item Restricción 6 (Conservación de Flujo): Si un paciente es visitado, el vehículo debe entrar y salir del paciente
+    \item Restricción 6 (Conservación de Flujo): Si un paciente es visitado, el vehículo debe entrar y salir del paciente:
+    $$\sum_{j: j \ne i} x_{i,j,k} = z_{i,k} \quad \forall i,k$$
     
-    \item Restricción 7 (Eliminación de Subtours): Utiliza la técnica MTZ para evitar ciclos desconectados
+    \item Restricción 7 (Eliminación de Subtours): Utiliza la técnica MTZ para evitar ciclos desconectados:
+    $$u_{i,k} - u_{j,k} + n \cdot x_{i,j,k} \leq n - 1 \quad \forall i,j,k$$
     
-    \item Restricción 8 (Propagación del Tiempo): El tiempo aumenta con los viajes
+    \item Restricción 8 (Propagación del Tiempo): El tiempo aumenta con los viajes:
+    $$T_{j,k} \geq T_{i,k} + d_{i,j} - M(1 - x_{i,j,k}) \quad \forall i,j,k, \, j \ne 0$$
     
-    \item Restricción 9 (Ventana de Tiempo - Límite Inferior): El paciente debe ser atendido dentro de su ventana de tiempo (después del tiempo de inicio permitido)
+    \item Restricción 9 (Ventana de Tiempo - Límite Inferior): El paciente debe ser atendido dentro de su ventana de tiempo (después del tiempo de inicio permitido):
+    $$T_{i,k} \geq (\text{turno}_i - \text{tolerancia}) \cdot z_{i,k} \quad \forall i,k$$
 
-    \item Restricción 10 (Ventana de Tiempo - Límite Superior): El paciente debe ser atendido dentro de su ventana de tiempo (antes del turno)
+    \item Restricción 10 (Ventana de Tiempo - Límite Superior): El paciente debe ser atendido dentro de su ventana de tiempo (antes del turno):
+    $$T_{i,k} \leq \text{turno}_i \cdot z_{i,k} + M(1 - z_{i,k}) \quad \forall i,k 1$$
 \end{itemize}
 \end{document}
