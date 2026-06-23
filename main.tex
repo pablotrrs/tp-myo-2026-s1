@@ -453,6 +453,212 @@ Maximizar los beneficios totales: suma de los beneficios de todos los pacientes 
     $$T_{i,k} \geq (\text{turno}_i - \text{tolerancia}) \cdot z_{i,k} \quad \forall i,k$$
 
     \item Restricción 10 (Ventana de Tiempo - Límite Superior): El paciente debe ser atendido dentro de su ventana de tiempo (antes del turno):
-    $$T_{i,k} \leq \text{turno}_i \cdot z_{i,k} + M(1 - z_{i,k}) \quad \forall i,k 1$$
+    $$T_{i,k} \leq \text{turno}_i \cdot z_{i,k} + M(1 - z_{i,k}) \quad \forall i,k$$
 \end{itemize}
+
+\subsection{Modelo 6: Algoritmo de Generación de Columnas para VRP}
+
+\subsubsection{Descripción del Problema}
+
+El algoritmo de generación de columnas (Column Generation, CG) es un método para resolver problemas de optimización lineales de gran tamaño. En el contexto del problema de ruteo de vehículos con ventanas de tiempo (VRPTW), el CG es particularmente útil cuando el número potencial de rutas es exponencial. 
+
+La idea central es trabajar con un conjunto limitado de rutas en cada iteración, en lugar de considerar todas las rutas posibles desde el inicio. El algoritmo consta de dos etapas:
+
+\begin{enumerate}
+    \item \textbf{Problema Maestro (Master Problem)}: Determina la combinación óptima de rutas del conjunto actual, minimizando la distancia total.
+    \item \textbf{Subproblema de Generación de Columnas}: Identifica nuevas rutas con costo reducido negativo que podrían mejorar la solución actual.
+\end{enumerate}
+
+El proceso itera hasta que el Subproblema no puede generar rutas mejores, indicando que se ha alcanzado la optimalidad (para la relajación LP) o factibilidad completa (en el caso entero).
+
+\subsubsection{Pseudocódigo del Algoritmo}
+
+\begin{Verbatim}[fontsize=\small]
+ALGORITMO GeneracionColumnasVRP
+  ENTRADA: lista_pacientes, distancias, capacidad_combi, 
+           turnos, tolerancia, num_combis
+  SALIDA: rutas_usadas, valor_objetivo, historia
+
+  // Paso 1: Generar rutas iniciales
+  rutas ← GenerarRutasInicialesFeasibles(
+      lista_pacientes, capacidad_combi, distancias, 
+      turnos, tolerancia)
+  
+  iteracion ← 0
+  costo_reducido ← infinito
+
+  // Bucle iterativo
+  mientras (costo_reducido > epsilon) Y (iteracion < max_iteraciones) hacer
+    iteracion ← iteracion + 1
+    
+    // Paso 2: Resolver problema maestro relajado
+    (status_maestro, valor_obj, duales) ← ResolverMaestroRelajado(
+        lista_pacientes, rutas, num_combis)
+    
+    si (status_maestro != OPTIMAL) entonces
+      registrar error y salir
+    fin si
+
+    // Paso 3: Resolver subproblema (pricing problem)
+    (nueva_ruta, costo_reducido) ← ResolverSubproblema(
+        lista_pacientes, distancias, duales, 
+        capacidad_combi, turnos, tolerancia)
+    
+    // Paso 4: Criterio de parada
+    si (costo_reducido <= epsilon) entonces
+      salir del bucle
+    fin si
+
+    // Paso 5: Agregar nueva ruta al conjunto
+    rutas ← rutas UNION {nueva_ruta}
+    
+    // Registrar en historial
+    RegistrarIteracion(historia, iteracion, num_rutas, 
+                       valor_objetivo, costo_reducido)
+  fin mientras
+
+  // Paso 6: Resolver problema maestro entero
+  (status_entero, valor_obj_entero, rutas_usadas) ← 
+      ResolverMaestroEntero(lista_pacientes, rutas, num_combis)
+
+  retornar rutas_usadas, valor_obj_entero, historia
+FIN ALGORITMO
+\end{Verbatim}
+
+A continuación, se describen en detalle cada paso del algoritmo.
+
+\subsubsection{Generación de Rutas Iniciales (Paso 1)}
+
+El primer paso genera un conjunto inicial de rutas factibles que sirven como punto de partida para el algoritmo CG. Estas rutas se construyen considerando todas las combinaciones posibles de pacientes que:
+
+\begin{itemize}
+    \item \textbf{Respetan la capacidad}: El número de pacientes no excede la capacidad del vehículo.
+    \item \textbf{Respetan ventanas de tiempo}: Los pacientes pueden ser visitados dentro de sus ventanas permitidas.
+    \item \textbf{Están conectadas al centro}: La ruta comienza y termina en el centro (nodo 0).
+\end{itemize}
+
+Matemáticamente, para cada subconjunto $S \subseteq P$ de pacientes (donde $P$ es el conjunto de todos los pacientes):
+
+\[
+\text{Ruta válida si:} \quad |S| \leq \text{capacidad} \quad \text{y} \quad \text{EsFeasibleTiempos}(S) = \text{TRUE}
+\]
+
+donde $\text{EsFeasibleTiempos}(S)$ verifica que existe un orden de visita tal que cada paciente $i \in S$ es visitado en su ventana de tiempo $[\text{turno}_i - \text{tolerancia}, \text{turno}_i]$.
+
+\subsubsection{Problema Maestro Relajado (Paso 2)}
+
+El problema maestro es un modelo de cobertura de pacientes que selecciona rutas del conjunto actual, minimizando la distancia total.
+
+\subsubsection*{Constantes}
+
+\begin{itemize}
+    \item $\mathcal{R}$: Conjunto de rutas disponibles generadas hasta la iteración actual.
+    \item $c_r$: Costo (distancia) de la ruta $r \in \mathcal{R}$.
+    \item $a_{i,r}$: Parámetro binario que vale 1 si el paciente $i$ está incluido en la ruta $r$, 0 en caso contrario.
+    \item $P$: Conjunto de pacientes.
+    \item $K$: Número de vehículos (combis) disponibles.
+\end{itemize}
+
+\subsubsection*{Variables de Decisión}
+
+\begin{itemize}
+    \item $y_r \in [0,1]$: Variable continua (en relajación LP) que indica el uso de la ruta $r$.
+    \item $y_r \in \{0,1\}$: Variable binaria cuando se resuelve el problema entero.
+\end{itemize}
+
+\begin{align*}
+  \mini & \sum_{r \in \mathcal{R}} c_r \cdot y_r \\
+  \subj \quad
+    & \sum_{r \in \mathcal{R}} a_{i,r} \cdot y_r \geq 1 \quad \forall i \in P \quad \text{(Cobertura de pacientes)} \\
+    & \sum_{r \in \mathcal{R}} y_r \leq K \quad \text{(Número máximo de combis)} \\
+    & 0 \leq y_r \leq 1 \quad \forall r \in \mathcal{R}
+\end{align*}
+
+\subsubsection*{Explicación}
+
+\begin{itemize}
+    \item \textbf{Función Objetivo}: Minimizar la distancia total de las rutas seleccionadas.
+    
+    \item \textbf{Restricción de Cobertura}: Cada paciente $i$ debe ser cubierto por al menos una ruta seleccionada (igualdad en este caso, cada paciente se visita exactamente una vez):
+    \[
+    \sum_{r \in \mathcal{R}} a_{i,r} \cdot y_r = 1 \quad \forall i \in P
+    \]
+    
+    \item \textbf{Restricción de Límite de Vehículos}: El número total de rutas seleccionadas no puede exceder el número de vehículos disponibles:
+    \[
+    \sum_{r \in \mathcal{R}} y_r \leq K
+    \]
+    
+    \item \textbf{Valores Duales}: Al resolver este problema, el solucionador LP retorna los valores duales $\lambda_i$ asociados a cada restricción de cobertura. Estos duales cuantifican la "importancia" de cada paciente en la solución actual y se utilizan en el Subproblema para generar nuevas rutas rentables.
+\end{itemize}
+
+\subsubsection{Subproblema de Generación de Columnas (Paso 3)}
+
+El subproblema genera nuevas rutas identificando aquellas con costo reducido negativo. El costo reducido de una ruta candidata $S$ se calcula como:
+
+\[
+\text{CostoReducido}(S) = \text{Costo}(S) - \sum_{i \in S} \lambda_i
+\]
+
+donde $\lambda_i$ son los duales obtenidos del Problema Maestro.
+
+\subsubsection*{Constantes}
+
+\begin{itemize}
+    \item $P$: Conjunto de pacientes.
+    \item $d_{i,j}$: Distancia entre nodos $i$ y $j$.
+    \item $\lambda_i$: Valor dual asociado al paciente $i$ del Problema Maestro.
+    \item $\text{capacidad}$: Capacidad máxima del vehículo.
+    \item $\text{turno}_i$, $\text{tolerancia}$: Ventanas de tiempo de cada paciente.
+\end{itemize}
+
+\subsubsection*{Objetivo}
+
+Encontrar el subconjunto de pacientes $S$ que minimiza el costo reducido:
+
+\[
+\min_{S \subseteq P} \left\{ \text{Costo}(S) - \sum_{i \in S} \lambda_i \right\}
+\]
+
+sujeto a:
+
+\begin{itemize}
+    \item $|S| \leq \text{capacidad}$ (restricción de capacidad)
+    \item $\text{EsFeasible}(S) = \text{TRUE}$ (restricción de ventanas de tiempo)
+\end{itemize}
+
+\subsubsection*{Explicación del Enfoque}
+
+El subproblema utiliza un método de \textbf{enumeración exhaustiva} para pequeños conjuntos de pacientes:
+
+\begin{enumerate}
+    \item Se generan todas las combinaciones posibles de pacientes que respetan la capacidad.
+    \item Para cada combinación, se verifica factibilidad de ventanas de tiempo.
+    \item Se calcula el costo reducido de cada ruta factible.
+    \item Se retorna la ruta con costo reducido mínimo (si es negativo).
+\end{enumerate}
+
+\subsubsection{Criterio de Parada (Paso 4)}
+
+El algoritmo converge cuando el Subproblema no puede encontrar una ruta con costo reducido negativo:
+
+\[
+\text{CostoReducido}_{\min} > \epsilon
+\]
+
+donde $\epsilon = 10^{-6}$ es una tolerancia numérica. Esto garantiza optimalidad (en la relajación LP) según el teorema de dualidad en programación lineal.
+
+\subsubsection{Solución Entera (Paso 6)}
+
+Una vez que el algoritmo CG converge, se resuelve el Problema Maestro como programa lineal entero (MIP) usando el conjunto final de rutas generadas:
+
+\begin{align*}
+  \mini & \sum_{r \in \mathcal{R}_{\text{final}}} c_r \cdot y_r \\
+  \subj \quad
+    & \sum_{r \in \mathcal{R}_{\text{final}}} a_{i,r} \cdot y_r = 1 \quad \forall i \in P \\
+    & \sum_{r \in \mathcal{R}_{\text{final}}} y_r \leq K \\
+    & y_r \in \{0,1\} \quad \forall r \in \mathcal{R}_{\text{final}}
+\end{align*}
+
+Esto retorna una solución entera (factible y óptima) para el problema original VRP.
 \end{document}
