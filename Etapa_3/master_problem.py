@@ -25,11 +25,28 @@ class ProblemaMaestro:
         self.num_combis = num_combis
         self.model = None
         self.variables_ruta = {}
+        self.variables_artificiales = {}  # Variables artificiales para factibilidad
         self.duales_pacientes = {}
+        # Penalidad para variables artificiales: debe ser grande pero no dominar los duales
+        # Usamos valor intermedio que balance factibilidad con precios razonables
+        self.BIG_M = 5000.0
     
-    def construir_modelo(self, relajado=True):
-        """Construye el modelo de programación lineal del problema maestro."""
+    def construir_modelo(self, relajado=True, usar_artificiales=True):
+        """
+        Construye el modelo de programación lineal del problema maestro.
+        
+        Args:
+            relajado: Si True, resuelve relajación lineal; si False, solución entera
+            usar_artificiales: Si True, incluye variables artificiales (para factibilidad inicial)
+                               Si False, no las incluye (evita duales inflados durante CG)
+        
+        Las variables artificiales garantizan factibilidad cuando usar_artificiales=True.
+        """
         self.model = Model("Problema_Maestro_VRP")
+        
+        # Configurar SCIP para evitar que elimine restricciones antes de leer duales
+        self.model.setParam("presolving/maxrounds", 0)  # Desactivar presolving
+        self.model.setParam("presolving/donotmultaggr", 1)  # No agregar variables
         
         # Variables: y_r = 1 si la ruta r es usada, 0 sino
         self.variables_ruta = {}
@@ -39,21 +56,42 @@ class ProblemaMaestro:
                 vtype=vtype, lb=0, ub=1, name=f"y_{ruta.id_ruta}"
             )
         
-        # Función objetivo: minimizar distancia total
-        self.model.setObjective(
-            quicksum(
-                ruta.costo * self.variables_ruta[ruta.id_ruta]
-                for ruta in self.rutas
-            ),
-            "minimize"
+        # Variables artificiales (solo si se especifica)
+        self.variables_artificiales = {}
+        if usar_artificiales:
+            for paciente in self.lista_pacientes:
+                self.variables_artificiales[paciente] = self.model.addVar(
+                    vtype="C", lb=0, ub=1, name=f"s_{paciente}"
+                )
+        
+        # Función objetivo: minimizar distancia + penalidad de variables artificiales (si se usan)
+        obj_expr = quicksum(
+            ruta.costo * self.variables_ruta[ruta.id_ruta]
+            for ruta in self.rutas
         )
+        if usar_artificiales:
+            obj_expr += quicksum(
+                self.BIG_M * self.variables_artificiales[paciente]
+                for paciente in self.lista_pacientes
+            )
+        self.model.setObjective(obj_expr, "minimize")
         
         # Restricciones: cada paciente debe ser cubierto por al menos una ruta
         self.restricciones_cobertura = {}
         for paciente in self.lista_pacientes:
             rutas_que_cubren = [ruta for ruta in self.rutas if paciente in ruta.pacientes]
             
-            if rutas_que_cubren:
+            if usar_artificiales:
+                # Con variables artificiales: sum(y_r : p in r) + s_i >= 1
+                restriccion = self.model.addCons(
+                    quicksum(
+                        self.variables_ruta[ruta.id_ruta]
+                        for ruta in rutas_que_cubren
+                    ) + self.variables_artificiales[paciente] >= 1,
+                    name=f"Cobertura_Paciente_{paciente}"
+                )
+            else:
+                # Sin variables artificiales: sum(y_r : p in r) >= 1 (puede ser infactible)
                 restriccion = self.model.addCons(
                     quicksum(
                         self.variables_ruta[ruta.id_ruta]
@@ -61,7 +99,8 @@ class ProblemaMaestro:
                     ) >= 1,
                     name=f"Cobertura_Paciente_{paciente}"
                 )
-                self.restricciones_cobertura[paciente] = restriccion
+            
+            self.restricciones_cobertura[paciente] = restriccion
         
         # Restricción: Máximo número de combis disponibles
         # (cada ruta usada requiere una combi)
@@ -71,18 +110,21 @@ class ProblemaMaestro:
                 name="Max_Combis_Disponibles"
             )
     
-    def resolver(self, relajado=True):
+    def resolver(self, relajado=True, usar_artificiales=True):
         """
         Resuelve el problema maestro.
         
         Args:
             relajado: Si True, resuelve la relajación lineal; si False, solución entera
+            usar_artificiales: Si True, usa variables artificiales para factibilidad
             
         Returns:
-            (status, valor_objetivo, uso_rutas, duales)
+            (status, valor_objetivo, uso_rutas, duales_pacientes)
+            
+        Los duales extraídos se usan en el subproblema para generar columnas.
         """
         if self.model is None:
-            self.construir_modelo(relajado=relajado)
+            self.construir_modelo(relajado=relajado, usar_artificiales=usar_artificiales)
         
         self.model.optimize()
         
@@ -91,25 +133,40 @@ class ProblemaMaestro:
         if status == "optimal":
             valor_objetivo = self.model.getObjVal()
             
-            # Extraer solución
+            # Extraer solución: solo rutas con valor > tolerancia
             uso_rutas = {}
             for ruta in self.rutas:
                 valor = self.model.getVal(self.variables_ruta[ruta.id_ruta])
                 if valor > 1e-6:
                     uso_rutas[ruta.id_ruta] = valor
             
-            # Extraer duales de las restricciones de cobertura
+            # Verificar si se usaron variables artificiales (solo si existen)
+            variables_artificiales_usadas = {}
+            if usar_artificiales:
+                for paciente in self.lista_pacientes:
+                    if paciente in self.variables_artificiales:
+                        val_artificial = self.model.getVal(self.variables_artificiales[paciente])
+                        if val_artificial > 1e-6:
+                            variables_artificiales_usadas[paciente] = val_artificial
+            
+            if variables_artificiales_usadas:
+                print(f"[CG] Variables artificiales usadas en iteración: {variables_artificiales_usadas}")
+            
+            # Extraer duales de las restricciones de cobertura (muy importante para CG)
             self.duales_pacientes = {}
             for paciente, restriccion in self.restricciones_cobertura.items():
                 try:
+                    # El dual es el "precio sombra" del paciente
+                    # Representa cuánto mejora la solución si se agrega una unidad de cobertura
                     dual = self.model.getDualsolLinear(restriccion)
-                    self.duales_pacientes[paciente] = dual
-                except:
-                    # Si no hay dual disponible, usar valor por defecto
+                    self.duales_pacientes[paciente] = dual if dual is not None else 0.0
+                except Exception:
+                    # Si no se puede extraer el dual, usar 0.0 (sin perturbar la solución)
                     self.duales_pacientes[paciente] = 0.0
             
             return status, valor_objetivo, uso_rutas, self.duales_pacientes
         else:
+            print(f"[Error] Problema maestro con status: {status}")
             return status, None, {}, {}
     
     def obtener_duales(self):

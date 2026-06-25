@@ -86,16 +86,17 @@ class SubproblemaGeneracionColumnas:
         """
         Calcula el costo reducido de una ruta.
         
-        Costo reducido = -costo_ruta - suma(duales_pacientes)
+        Costo reducido = suma(duales_pacientes) - costo_ruta
         
-        Si es > 0, la ruta es rentable (mejora la solución).
+        Si es > 0, la ruta es rentable (mejora la solución porque reduce el objetivo).
+        Cuando una ruta tiene costo_reducido negativo, agregarla a la base MEJORA el objetivo.
         """
         costo_ruta = self._calcular_costo_ruta(pacientes)
         suma_duales = sum(self.duales.get(p, 0) for p in pacientes)
         
-        # Costo reducido: -costo_ruta - suma_duales
-        # Negativo porque queremos minimizar costo en el problema original
-        costo_reducido = -costo_ruta - suma_duales
+        # Costo reducido: suma_duales - costo_ruta
+        # Si es > 0: la ruta es rentable (mejora el objetivo cuando se agrega)
+        costo_reducido = suma_duales - costo_ruta
         
         return costo_reducido
     

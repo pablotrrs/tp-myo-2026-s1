@@ -594,13 +594,13 @@ El problema maestro es un modelo de cobertura de pacientes que selecciona rutas 
 
 \subsubsection{Subproblema de Generación de Columnas (Paso 3)}
 
-El subproblema genera nuevas rutas identificando aquellas con costo reducido negativo. El costo reducido de una ruta candidata $S$ se calcula como:
+El subproblema genera nuevas rutas identificando aquellas con costo reducido positivo. El costo reducido de una ruta candidata $S$ se calcula como:
 
 \[
-\text{CostoReducido}(S) = \text{Costo}(S) - \sum_{i \in S} \lambda_i
+\text{CostoReducido}(S) = \sum_{i \in S} \lambda_i - \text{Costo}(S)
 \]
 
-donde $\lambda_i$ son los duales obtenidos del Problema Maestro.
+donde $\lambda_i$ son los duales obtenidos del Problema Maestro. Un costo reducido positivo indica que la ruta proporciona un valor agregado mediante la cobertura de pacientes de alto dual a un costo de viaje relativamente bajo.
 
 \subsubsection*{Constantes}
 
@@ -614,10 +614,10 @@ donde $\lambda_i$ son los duales obtenidos del Problema Maestro.
 
 \subsubsection*{Objetivo}
 
-Encontrar el subconjunto de pacientes $S$ que minimiza el costo reducido:
+Encontrar el subconjunto de pacientes $S$ que maximiza el costo reducido:
 
 \[
-\min_{S \subseteq P} \left\{ \text{Costo}(S) - \sum_{i \in S} \lambda_i \right\}
+\max_{S \subseteq P} \left\{ \sum_{i \in S} \lambda_i - \text{Costo}(S) \right\}
 \]
 
 sujeto a:
@@ -634,19 +634,19 @@ El subproblema utiliza un método de \textbf{enumeración exhaustiva} para peque
 \begin{enumerate}
     \item Se generan todas las combinaciones posibles de pacientes que respetan la capacidad.
     \item Para cada combinación, se verifica factibilidad de ventanas de tiempo.
-    \item Se calcula el costo reducido de cada ruta factible.
-    \item Se retorna la ruta con costo reducido mínimo (si es negativo).
+    \item Se calcula el costo reducido de cada ruta factible usando la fórmula anterior.
+    \item Se retorna la ruta con costo reducido máximo (si es positivo, indicando que mejora la solución actual).
 \end{enumerate}
 
 \subsubsection{Criterio de Parada (Paso 4)}
 
-El algoritmo converge cuando el Subproblema no puede encontrar una ruta con costo reducido negativo:
+El algoritmo converge cuando el Subproblema no puede encontrar una ruta que mejore significativamente la solución actual:
 
 \[
-\text{CostoReducido}_{\min} > \epsilon
+\text{CostoReducido}_{\max} \leq \epsilon
 \]
 
-donde $\epsilon = 10^{-6}$ es una tolerancia numérica. Esto garantiza optimalidad (en la relajación LP) según el teorema de dualidad en programación lineal.
+donde $\epsilon = 10^{-6}$ es una tolerancia numérica. Esto garantiza optimalidad (en la relajación LP) según el teorema de dualidad en programación lineal. Un costo reducido $\leq \epsilon$ indica que ninguna ruta nueva puede mejorar el valor objetivo en más de la tolerancia permitida.
 
 \subsubsection{Solución Entera (Paso 6)}
 

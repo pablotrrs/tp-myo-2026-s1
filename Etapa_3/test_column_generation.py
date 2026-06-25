@@ -124,7 +124,7 @@ class TestRutas(unittest.TestCase):
     """Tests para la clase Rutas (generación de rutas iniciales)."""
     
     def test_01_genera_rutas_individuales_sin_capacidad(self):
-        """Verifica generación de rutas cuando capacidad >= nro_pacientes."""
+        """Verifica generación minimalista: solo rutas individuales (single-patient)."""
         pacientes = [1, 2]
         distancias = {
             (0, 1): 10.0,
@@ -138,14 +138,13 @@ class TestRutas(unittest.TestCase):
         
         rutas = Rutas(pacientes, distancias, capacidad)
         
-        # Debe generar: {1}, {2}, {1,2} (todas las combinaciones hasta capacidad)
-        self.assertEqual(len(rutas.rutas), 3)
+        # Punto 1 "Inicialización Minimalista": Solo genera rutas individuales
+        self.assertEqual(len(rutas.rutas), 2)
         self.assertIn(Ruta([1], distancias), rutas.rutas)
         self.assertIn(Ruta([2], distancias), rutas.rutas)
-        self.assertIn(Ruta([1, 2], distancias), rutas.rutas)
     
     def test_02_genera_rutas_combinadas_con_capacidad_2(self):
-        """Verifica generación de rutas individuales y combinadas con cap=2."""
+        """Verifica generación minimalista: solo rutas individuales (single-patient)."""
         pacientes = [1, 2, 3]
         distancias = {
             (0, 1): 10.0, (1, 0): 10.0,
@@ -159,10 +158,10 @@ class TestRutas(unittest.TestCase):
         
         rutas = Rutas(pacientes, distancias, capacidad)
         
-        # Debe generar: {1}, {2}, {3}, {1,2}, {1,3}, {2,3}
+        # Punto 1 "Inicialización Minimalista": Solo genera rutas individuales
+        # Debe generar: {1}, {2}, {3}
         num_individuales = 3
-        num_combinadas = 3
-        self.assertEqual(len(rutas.rutas), num_individuales + num_combinadas)
+        self.assertEqual(len(rutas.rutas), num_individuales)
     
     def test_03_filtra_rutas_infactibles_con_time_windows(self):
         """Verifica que se filtren rutas infactibles por time windows."""

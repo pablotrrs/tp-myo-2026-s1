@@ -139,23 +139,28 @@ class Rutas:
         print(f"Rutas iniciales generadas: {len(self.rutas)}")
     
     def _generar_rutas_iniciales(self):
-        """Genera rutas iniciales factibles (respetando capacidad y ventanas de tiempo)."""
-        from itertools import combinations
+        """
+        Genera SOLO rutas individuales (un paciente por ruta).
+        
+        Este es el enfoque minimalista para Column Generation:
+        comenzamos con un pool muy pequeño de rutas y las generamos iterativamente.
+        """
         rutas = []
         contador = 0
         
-        for tam in range(1, self.capacidad_combi + 1):
-            for pacientes in combinations(self.lista_pacientes, tam):
-                ruta = Ruta(
-                    list(pacientes),
-                    self.distancias,
-                    id_ruta=contador,
-                    turnos=self.turnos,
-                    tolerancia=self.tolerancia
-                )
-                if ruta.es_factible():
-                    rutas.append(ruta)
-                    contador += 1
+        # Generar una ruta individual para CADA paciente
+        for paciente in self.lista_pacientes:
+            ruta = Ruta(
+                [paciente],
+                self.distancias,
+                id_ruta=contador,
+                turnos=self.turnos,
+                tolerancia=self.tolerancia
+            )
+            # Verificar factibilidad (ventanas de tiempo, etc.)
+            if ruta.es_factible():
+                rutas.append(ruta)
+                contador += 1
         
         return rutas
     
