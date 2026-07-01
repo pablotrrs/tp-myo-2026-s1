@@ -1,0 +1,69 @@
+# Tolerancia de ventanas de tiempo (en minutos)
+Tolerancia: 30
+
+# Pacientes y Turnos (ID, Hora_Turno_Minutos)
+Pacientes
+1, 20
+2, 25
+3, 60
+4, 65
+5, 100
+6, 105
+
+# Combis y capacidades (Nombre : Capacidad)
+Combis
+Combi_A:3
+Combi_B:3
+Combi_C:2
+
+# Matriz de distancias/tiempos entre nodos (Simétrica)
+# Clusters lógicos: Nodos(1,2) a 10 min, Nodos(3,4) a 35 min, Nodos(5,6) a 60 min.
+Matriz
+0, 1, 10
+0, 2, 15
+0, 3, 35
+0, 4, 40
+0, 5, 60
+0, 6, 65
+
+1, 0, 10
+1, 2, 5
+1, 3, 25
+1, 4, 30
+1, 5, 50
+1, 6, 55
+
+2, 0, 15
+2, 1, 5
+2, 3, 20
+2, 4, 25
+2, 5, 45
+2, 6, 50
+
+3, 0, 35
+3, 1, 25
+3, 2, 20
+3, 4, 5
+3, 5, 25
+3, 6, 30
+
+4, 0, 40
+4, 1, 30
+4, 2, 25
+4, 3, 5
+4, 5, 20
+4, 6, 25
+
+5, 0, 60
+5, 1, 50
+5, 2, 45
+5, 3, 25
+5, 4, 20
+5, 6, 5
+
+6, 0, 65
+6, 1, 55
+6, 2, 50
+6, 3, 30
+6, 4, 25
+6, 5, 5
