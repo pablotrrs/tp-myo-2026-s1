@@ -1,0 +1,6 @@
+# id,x,y,ih_inicio,ih_fin,categoria,beneficio
+0,50.0,50.0
+1,65.0,50.0,70,100,Normal,10
+2,50.0,70.0,90,120,Normal,10
+3,25.0,50.0,120,150,Normal,10
+4,50.0,20.0,150,180,Normal,10

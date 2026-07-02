@@ -1,0 +1,459 @@
+\documentclass[12pt]{article}
+
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[margin=15mm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amsthm,amssymb}
+\usepackage{mathtools}
+\usepackage{hyperref}
+\usepackage{nameref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{fancyvrb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{definition}{Definition}
+
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+
+\def\R{{\mathbb{R}}}
+\def\Z{{\mathbb{Z}}}
+\def\Zz{{\mathbb{Z}_{\geq 0}}}
+
+\newcommand{\maxi}{\texttt{max}\quad\,\,}
+\newcommand{\mini}{\texttt{minimize}\quad\,\,}
+\newcommand{\subj}{\texttt{subject to}\quad}
+
+\usepackage{enumitem}
+\setlist{nosep}
+
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    breaklines=true,
+    showstringspaces=false,
+    tabsize=4
+}
+
+\title{\Huge Trabajo Práctico\\\Large Modelado y Optimización}
+\date{
+    \large 2026/1 \\
+    Universidad Nacional de General Sarmiento \\
+    \vspace{2cm}
+    \hfill \textbf{Integrantes:}\\
+    \hfill Aragón, Evelin\\
+    \hfill Faccini, Gonzalo\\
+    \hfill Curcio, Matías\\
+    \hfill Torres, Pablo
+}
+\author{\textbf{Profesor:}\\Marcelo Mydlarz}
+
+\begin{document}
+
+\maketitle
+\newpage
+\tableofcontents
+\newpage
+
+\section{Introducción}
+
+El trabajo práctico se enfoca en resolver un problema fundamental de logística de salud integral: optimizar el traslado de pacientes desde sus domicilios hacia un centro médico de alta complejidad, en contextos donde los recursos (vehículos) son limitados y las restricciones operativas son complejas.
+
+\subsection{Descripción del Problema}
+
+Una empresa de logística médica opera una flota heterogénea de vehículos (combis) basadas en un centro médico central. Cada día, debe atender solicitudes de traslado de pacientes desde sus hogares al centro. Debido a la naturaleza médica de los traslados y a limitaciones de recursos, la empresa no está obligada a recoger a todos los pacientes, sino que debe seleccionar estratégicamente cuáles atender para maximizar el beneficio social y operativo del sistema.
+
+Cada paciente presenta características específicas:
+\begin{itemize}
+    \item \textbf{Ubicación geográfica}: coordenadas $(x_i, y_i)$ en el plano
+    \item \textbf{Ventana horaria}: intervalo $[ih_{\text{inicio}}, ih_{\text{fin}}]$ dentro del cual debe ser recogido
+    \item \textbf{Categoría médica}: clasificación según protocolo médico (p.ej., inmunodeprimido, infeccioso, movilidad reducida)
+    \item \textbf{Beneficio}: valor social/económico de atender al paciente
+\end{itemize}
+
+La flota de vehículos también es heterogénea:
+\begin{itemize}
+    \item \textbf{Capacidad de asientos}: cantidad máxima de pacientes por vehículo
+    \item \textbf{Costo operativo}: costo de poner en servicio el vehículo por día
+    \item \textbf{Disponibilidad}: cantidad de unidades de cada tipo
+\end{itemize}
+
+\subsection{Desafíos Operativos}
+
+\begin{itemize}
+    \item \textbf{Incompatibilidades médicas}: Ciertas categorías de pacientes no pueden compartir vehículo por razones de bioseguridad o protocolo médico.
+    \item \textbf{Ventanas de tiempo}: Cada paciente tiene una ventana horaria estricta. No se permite recoger antes de $ih_{\text{inicio}}$ ni después de $ih_{\text{fin}}$.
+    \item \textbf{Selección estratégica}: No todos los pacientes pueden ser atendidos; debe maximizarse el beneficio neto (beneficio de pacientes atendidos menos costo operativo de vehículos).
+    \item \textbf{Optimización de rutas}: Diseñar rutas eficientes que respeten capacidad, tiempos y compatibilidades.
+    \item \textbf{Heterogeneidad de recursos}: Diferentes tipos de vehículos con distintas características implican complejidad combinatoria.
+\end{itemize}
+
+\subsection{Objetivo General}
+
+Desarrollar e implementar tres estrategias de resolución con complejidad creciente:
+
+\begin{enumerate}
+    \item \textbf{Salud (Modelo MILP Compacto)}: Formulación algebraica directa utilizando programación lineal entera mixta.
+    \item \textbf{SaludCG (Generación de Columnas)}: Descomposición del problema mediante generación de columnas para mejorar escalabilidad.
+    \item \textbf{SaludChallenger (Branch \& Price)}: Mejoras avanzadas basadas en la literatura (descomposición, eliminación de columnas, inicialización eficiente).
+\end{enumerate}
+
+Todas las estrategias deben incluir un módulo de validación (\texttt{SaludTest}) que verifica factibilidad sin usar programación lineal.
+
+\newpage
+\section{Estrategia 1: Salud (Modelo MILP Compacto)}
+
+\subsection{Descripción de la Estrategia}
+
+La estrategia Salud resuelve el problema mediante un modelo de \textbf{Programación Lineal Entera Mixta (MILP) compacto}. Este enfoque formula el problema completo en un único modelo algebraico que incluye todas las restricciones operativas, y lo resuelve directamente utilizando un solver de optimización (en este caso, PySCIPOpt sobre el solver SCIP).
+
+\textbf{Ventajas:}
+\begin{itemize}
+    \item Garantiza optimalidad (o cotas de optimalidad) dentro del tiempo permitido
+    \item Implementación directa y comprensible
+    \item Adecuada para instancias pequeñas a medianas
+\end{itemize}
+
+\textbf{Limitaciones:}
+\begin{itemize}
+    \item Escalabilidad limitada para instancias grandes
+    \item Tiempo de resolución puede crecer exponencialmente con el tamaño
+    \item Espacio de soluciones potencialmente muy grande
+\end{itemize}
+
+\subsection{Modelo Matemático}
+
+\subsubsection{Descripción del Problema Específico}
+
+Se busca diseñar un conjunto de rutas (una por cada vehículo) que:
+\begin{itemize}
+    \item Seleccionen qué pacientes serán atendidos
+    \item Asignen cada paciente atendido a exactamente un vehículo
+    \item Definan el orden de visita para cada vehículo
+    \item Respeten todas las restricciones operativas (capacidad, tiempo, incompatibilidades)
+    \item Maximicen el beneficio neto total
+\end{itemize}
+
+\subsubsection{Conjuntos, Parámetros y Variables de Decisión}
+
+\subsubsection*{Conjuntos}
+
+\begin{itemize}
+    \item $P$: Conjunto de pacientes solicitantes, $P = \{1, 2, \ldots, m\}$
+    \item $V = \{0\} \cup P$: Conjunto de nodos (centro médico + pacientes)
+    \item $K$: Conjunto de combis individuales disponibles
+    \item $T$: Conjunto de tipos de combis (Combi\_Chica, Combi\_Mediana, etc.)
+    \item $\mathcal{C}$: Conjunto de categorías médicas
+    \item $\mathcal{I} \subseteq \mathcal{C} \times \mathcal{C}$: Conjunto de pares de categorías incompatibles
+\end{itemize}
+
+\subsubsection*{Parámetros}
+
+\begin{itemize}
+    \item $\text{beneficio}[p]$: Beneficio de atender al paciente $p$ (valor numérico)
+    \item $\text{costo}[t]$: Costo operativo del tipo de combi $t$
+    \item $\text{capacidad}[k]$: Número máximo de asientos en la combi $k$
+    \item $(x_p, y_p)$: Coordenadas geográficas del paciente $p$
+    \item $(x_0, y_0)$: Coordenadas del centro médico (nodo 0)
+    \item $d[i,j] = \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2}$: Distancia euclidea entre nodos $i$ y $j$
+    \item $[ih_{\text{inicio}}[p], ih_{\text{fin}}[p]]$: Ventana de tiempo para el paciente $p$
+    \item $\text{categoria}[p]$: Categoría médica del paciente $p$
+    \item $\text{tipo}[k]$: Tipo de combi al que pertenece la combi $k$
+    \item $M = 10000$: Constante Big-M para linearización de restricciones
+\end{itemize}
+
+\subsubsection*{Variables de Decisión}
+
+\begin{itemize}
+    \item $x[i,j,k] \in \{0, 1\}$: Binaria, igual a 1 si la combi $k$ viaja directamente del nodo $i$ al nodo $j$
+    \item $z[p,k] \in \{0, 1\}$: Binaria, igual a 1 si el paciente $p$ es atendido por la combi $k$
+    \item $a[p] \in \{0, 1\}$: Binaria, igual a 1 si el paciente $p$ es atendido (por alguna combi)
+    \item $u[k] \in \{0, 1\}$: Binaria, igual a 1 si la combi $k$ es utilizada (realiza algún viaje)
+    \item $T[i,k] \geq 0$: Continua, tiempo de llegada (o inicio de servicio) a nodo $i$ con combi $k$
+\end{itemize}
+
+\subsubsection{Formulación Algebraica Completa}
+
+\begin{align}
+  \max & \quad Z = \sum_{p \in P} \text{beneficio}[p] \cdot a[p] - \sum_{k \in K} \text{costo}[\text{tipo}[k]] \cdot u[k] \label{eq:obj}
+\end{align}
+
+\subsubsection*{Restricciones}
+
+\paragraph{1. Cobertura de Pacientes}
+
+\begin{align}
+  \sum_{k \in K} z[p,k] \leq 1 \quad &\forall p \in P \label{eq:cov1}\\
+  a[p] = \sum_{k \in K} z[p,k] \quad &\forall p \in P \label{eq:cov2}
+\end{align}
+
+Ecuación \eqref{eq:cov1}: Cada paciente es atendido por a lo sumo una combi.
+
+Ecuación \eqref{eq:cov2}: Un paciente se considera atendido si está asignado a alguna combi.
+
+\paragraph{2. Flujo de Rutas}
+
+\begin{align}
+  \sum_{j \in V, j \neq i} x[i,j,k] = \sum_{j \in V, j \neq i} x[j,i,k] \quad &\forall i \in V, k \in K \label{eq:flow}
+\end{align}
+
+Conservación de flujo: Todo lo que entra a un nodo debe salir (excepto si no se visita).
+
+\paragraph{3. Operación del Centro Médico}
+
+\begin{align}
+  \sum_{j \in P} x[0,j,k] = u[k] \quad &\forall k \in K \label{eq:depart}\\
+  \sum_{i \in P} x[i,0,k] = u[k] \quad &\forall k \in K \label{eq:return}
+\end{align}
+
+Ecuación \eqref{eq:depart}: Si la combi $k$ es utilizada, debe partir desde el centro.
+
+Ecuación \eqref{eq:return}: Si la combi $k$ es utilizada, debe regresar al centro.
+
+\paragraph{4. Restricción de Capacidad}
+
+\begin{align}
+  \sum_{p \in P} z[p,k] \leq \text{capacidad}[k] \cdot u[k] \quad &\forall k \in K \label{eq:cap}
+\end{align}
+
+El número de pacientes en la combi $k$ no puede exceder su capacidad.
+
+\paragraph{5. Restricciones de Ventana de Tiempo}
+
+\begin{align}
+  T[0,k] = 0 \quad &\forall k \in K \label{eq:t0}\\
+  T[i,k] \geq T[j,k] + d[j,i] - M(1 - x[j,i,k]) \quad &\forall i,j \in V, k \in K, i \neq j \label{eq:tprop}\\
+  T[p,k] \geq ih_{\text{inicio}}[p] - M(1 - z[p,k]) \quad &\forall p \in P, k \in K \label{eq:twin_lower}\\
+  T[p,k] \leq ih_{\text{fin}}[p] + M(1 - z[p,k]) \quad &\forall p \in P, k \in K \label{eq:twin_upper}
+\end{align}
+
+Ecuación \eqref{eq:t0}: El tiempo en el centro al inicio es 0.
+
+Ecuación \eqref{eq:tprop}: Propagación del tiempo: si se viaja de $j$ a $i$ con combi $k$, el tiempo en $i$ es al menos el tiempo en $j$ más la distancia.
+
+Ecuaciones \eqref{eq:twin_lower} y \eqref{eq:twin_upper}: Si el paciente $p$ es atendido por combi $k$, debe ser recogido dentro de su ventana de tiempo.
+
+\paragraph{6. Restricciones de Incompatibilidad}
+
+\begin{align}
+  z[p,k] + z[q,k] \leq 1 \quad &\forall k \in K, (p,q) \in \mathcal{I}_{\text{pacientes}} \label{eq:incompat}
+\end{align}
+
+donde $\mathcal{I}_{\text{pacientes}} = \{(p,q) : \text{categoria}[p], \text{categoria}[q] \in \mathcal{I}\}$
+
+Si dos pacientes pertenecen a categorías incompatibles, no pueden estar en el mismo vehículo.
+
+\subsubsection{Explicación de la Función Objetivo y Restricciones}
+
+\paragraph{Función Objetivo (Ec. \eqref{eq:obj})}
+
+Maximizar el \textbf{beneficio neto} total:
+\[
+Z = \sum_{p \in P} \text{beneficio}[p] \cdot a[p] - \sum_{k \in K} \text{costo}[\text{tipo}[k]] \cdot u[k]
+\]
+
+Componentes:
+\begin{itemize}
+    \item \textbf{Primer término}: Suma de beneficios de todos los pacientes atendidos.
+    \item \textbf{Segundo término}: Costo total de operación de los vehículos utilizados (se resta porque es un costo).
+\end{itemize}
+
+El modelo busca el equilibrio entre maximizar beneficios y minimizar costos operativos.
+
+\paragraph{Restricciones de Cobertura (Ecs. \eqref{eq:cov1}, \eqref{eq:cov2})}
+
+Aseguran que:
+\begin{itemize}
+    \item Cada paciente puede ser atendido por \textbf{a lo sumo una combi} (no hay duplicación)
+    \item La variable $a[p]$ captura correctamente si el paciente fue atendido
+\end{itemize}
+
+\paragraph{Restricción de Flujo (Ec. \eqref{eq:flow})}
+
+Asegura que cada vehículo forma una \textbf{ruta conexa}:
+\begin{itemize}
+    \item Todo lo que "entra" a un nodo debe "salir"
+    \item Previene ciclos desconectados (subtours)
+\end{itemize}
+
+\paragraph{Restricciones de Centro Médico (Ecs. \eqref{eq:depart}, \eqref{eq:return})}
+
+Garantizan que:
+\begin{itemize}
+    \item Todo vehículo utilizado \textbf{parte del centro} al inicio
+    \item Todo vehículo utilizado \textbf{regresa al centro} al final
+\end{itemize}
+
+\paragraph{Restricción de Capacidad (Ec. \eqref{eq:cap})}
+
+Respeta la \textbf{capacidad máxima} de cada vehículo:
+\begin{itemize}
+    \item Número de pacientes $\leq$ capacidad del vehículo
+\end{itemize}
+
+\paragraph{Restricciones de Ventana de Tiempo (Ecs. \eqref{eq:t0}--\eqref{eq:twin_upper})}
+
+Garantizan cumplimiento de horarios:
+\begin{itemize}
+    \item El tiempo en el centro al inicio es cero (tiempo de partida)
+    \item El tiempo se propaga correctamente a lo largo de la ruta
+    \item Si un paciente es atendido, debe ser recogido dentro de su ventana $[ih_{\text{inicio}}, ih_{\text{fin}}]$
+\end{itemize}
+
+\paragraph{Restricciones de Incompatibilidad (Ec. \eqref{eq:incompat})}
+
+Aseguran que:
+\begin{itemize}
+    \item Dos pacientes con categorías médicas incompatibles \textbf{no pueden compartir vehículo}
+    \item Previene conflictos por bioseguridad o protocolo médico
+\end{itemize}
+
+\newpage
+\section{Estrategia 2: SaludCG (Generación de Columnas)}
+
+\subsection{Descripción de la Estrategia}
+
+[SECCIÓN A COMPLETAR]
+
+La estrategia SaludCG implementa un enfoque de \textbf{Generación de Columnas (Column Generation, CG)} para resolver el problema de manera más escalable. Este método descompone el problema original en:
+
+\begin{itemize}
+    \item \textbf{Problema Maestro}: Selecciona rutas de un conjunto disponible, minimizando costo/maximizando beneficio
+    \item \textbf{Subproblema de Pricing}: Genera nuevas rutas con costo reducido negativo
+\end{itemize}
+
+El proceso itera hasta convergencia LP, permitiendo manejar instancias más grandes.
+
+\subsection{Modelo Matemático}
+
+[A COMPLETAR]
+
+\newpage
+\section{Estrategia 3: SaludChallenger (Branch \& Price)}
+
+\subsection{Descripción de la Estrategia}
+
+[SECCIÓN A COMPLETAR]
+
+La estrategia SaludChallenger mejora el enfoque de Generación de Columnas mediante técnicas avanzadas como:
+
+\begin{itemize}
+    \item \textbf{Branch \& Price}: Integración de generación de columnas con branch-and-bound para optimalidad entera
+    \item \textbf{Inicialización eficiente}: Generación inteligente de columnas iniciales
+    \item \textbf{Eliminación de columnas}: Remoción de rutas no utilizadas después de $k$ iteraciones sin uso
+    \item \textbf{Warm-starting}: Aprovechamiento de soluciones previas
+\end{itemize}
+
+\subsection{Modelo Matemático}
+
+[A COMPLETAR]
+
+\newpage
+\section{Evaluación Comparativa}
+
+\subsection{Configuración de Evaluación}
+
+\begin{itemize}
+    \item \textbf{Instancias}: 4 casos de prueba en carpeta \texttt{IN/}
+    \item \textbf{Timeout global}: 500 segundos por instancia y modelo
+    \item \textbf{Métricas capturadas}:
+    \begin{itemize}
+        \item Mejor objetivo encontrado ($Z$)
+        \item Cota dual (relajación LP)
+        \item Número de restricciones
+        \item Número de variables
+        \item Número de variables en modelo maestro (para CG)
+        \item Tiempo de ejecución
+    \end{itemize}
+\end{itemize}
+
+\subsection{Tabla Comparativa}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{\textbf{Instancia}} & \multirow{2}{*}{\textbf{Métrica}} & \multicolumn{3}{c|}{\textbf{Estrategia}} & \multirow{2}{*}{\textbf{Óptimo}} \\
+\cline{3-5}
+& & Salud & SaludCG & Challenger & \\
+\hline
+\multirow{5}{*}{\texttt{test1}} 
+& Mejor objetivo & 390.0 & - & - & 390.0 \\
+& Cota dual & 390.0 & - & - & 390.0 \\
+& \# variables & 143 & - & - & - \\
+& \# restricciones & 171 & - & - & - \\
+& Tiempo (s) & 0.45 & - & - & - \\
+\hline
+\multirow{5}{*}{\texttt{test2}} 
+& Mejor objetivo & 640.0 & - & - & 640.0 \\
+& Cota dual & 640.0 & - & - & 640.0 \\
+& \# variables & 244 & - & - & - \\
+& \# restricciones & 284 & - & - & - \\
+& Tiempo (s) & 0.32 & - & - & - \\
+\hline
+\multirow{5}{*}{\texttt{test3}} 
+& Mejor objetivo & 1110.0 & - & - & 1110.0 \\
+& Cota dual & 1110.0 & - & - & 1110.0 \\
+& \# variables & 367 & - & - & - \\
+& \# restricciones & 427 & - & - & - \\
+& Tiempo (s) & 0.28 & - & - & - \\
+\hline
+\multirow{5}{*}{\texttt{test4}} 
+& Mejor objetivo & 350.0 & - & - & 350.0 \\
+& Cota dual & 350.0 & - & - & 350.0 \\
+& \# variables & 244 & - & - & - \\
+& \# restricciones & 284 & - & - & - \\
+& Tiempo (s) & 0.41 & - & - & - \\
+\hline
+\end{tabular}
+\caption{Resultados comparativos de las tres estrategias. En negrita se destaca el mejor valor para cada métrica.}
+\label{tabla:comparacion}
+\end{table}
+
+\subsection{Abreviaciones}
+
+\begin{itemize}
+    \item \textbf{Mejor objetivo}: Valor de la función objetivo $Z$ encontrado (beneficio neto)
+    \item \textbf{Cota dual}: Valor objetivo de la relajación lineal (proporciona cota inferior)
+    \item \textbf{\# variables}: Cantidad total de variables en el modelo
+    \item \textbf{\# restricciones}: Cantidad total de restricciones en el modelo
+    \item \textbf{Tiempo (s)}: Tiempo de ejecución en segundos
+    \item \textbf{-}: No aplicable o no completado aún
+\end{itemize}
+
+\newpage
+\section{Conclusiones}
+
+[A COMPLETAR]
+
+\subsection{Hallazgos Principales}
+
+\begin{itemize}
+    \item La Estrategia 1 (Salud MILP compacto) resuelve correctamente todas las instancias a optimalidad
+    \item Los tiempos de ejecución son muy bajos (< 1 segundo) para las instancias de prueba
+    \item La validación sin LP (SaludTest) funciona correctamente, confirmando factibilidad de todas las soluciones
+\end{itemize}
+
+\subsection{Comportamientos Sorprendentes}
+
+[A COMPLETAR]
+
+\subsection{Dificultades y Conocimientos Adquiridos}
+
+\begin{itemize}
+    \item \textbf{Linearización de restricciones}: El uso de Big-M es necesario pero requiere calibración cuidadosa
+    \item \textbf{Reconstrucción de rutas}: Extraer la solución desde variables de decisión requiere cuidado en la topología
+    \item \textbf{Validación sin LP}: Implementar validación sin programación lineal es posible y útil para verificar factibilidad de manera independiente
+\end{itemize}
+
+\end{document}

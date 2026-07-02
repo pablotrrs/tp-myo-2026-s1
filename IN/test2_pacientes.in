@@ -1,0 +1,7 @@
+# id,x,y,ih_inicio,ih_fin,categoria,beneficio
+0,50.0,50.0
+1,30.0,80.0,100,400,Inmunodeprimido,200
+2,25.0,70.0,150,400,Infeccioso,180
+3,60.0,75.0,100,350,Sanitario,220
+4,45.0,30.0,200,450,Pediatrico,150
+5,70.0,60.0,100,350,Sanitario,190

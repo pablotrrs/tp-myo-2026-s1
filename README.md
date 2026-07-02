@@ -1,443 +1,211 @@
-# Maximum Flow Problem Solver
+# Estrategia 1: Salud - Modelo Compacto MILP
 
-Solver para problemas de flujo máximo en redes dirigidas usando programación lineal con **PySCIPOpt**.
+## Descripción General
 
-## Tabla de Contenidos
+Implementa la **primera estrategia** del trabajo práctico: resolver el problema de logística médica mediante un **modelo compacto de Programación Lineal Entera Mixta (MILP)** usando PySCIPOpt.
 
-1. [Aspectos Técnicos](#aspectos-técnicos)
-2. [Modelos Matemáticos](#modelos-matemáticos)
+## Archivos Principales
 
----
+### `Salud.py`
+Implementación del modelo MILP compacto.
 
-## Aspectos Técnicos
+**Función principal:**
+```python
+def Salud(instancia: str, threshold: float) -> bool
+```
 
-### Descripción
+Parámetros:
+- `instancia`: nombre de la instancia sin extensión (ej: "test1")
+- `threshold`: tiempo máximo de ejecución en segundos
 
-Este proyecto implementa un solver eficiente para resolver problemas de flujo máximo en redes dirigidas y problemas de ruteo de vehículos. El solver soporta múltiples configuraciones:
-- **Flujo máximo clásico**: Una fuente y un destino
-- **Múltiples fuentes y destinos**: Generalización que convierte el problema a su forma clásica
-- **Variante de centros y pacientes (VRP)**: Modelo especializado para problemas de distribución con restricciones de capacidad
-- **VRPTW (VRP con Ventanas de Tiempo)**: Extensión anterior que agrega restricciones temporales
-- **VRP con Categorías Incompatibles**: Extensión que incorpora restricciones de compatibilidad entre categorías de pacientes
+Rutas estándar:
+- **Entrada**: `./IN/{instancia}_*.in`
+- **Salida**: `./OUT_model1/{instancia}.out`
 
-### Requisitos
+Retorna: `True` si se completó exitosamente, `False` en caso contrario
 
-- Python 3.7+
-- PySCIPOpt 6.0+
+### `SaludTest.py`
+Función de validación que verifica si una solución es operativamente factible.
 
-### Instalación de Dependencias
+**Función principal:**
+```python
+def SaludTest(instancia: str, output_file: str = None, in_path: str = "./IN") -> bool
+```
 
+Parámetros:
+- `instancia`: nombre de la instancia
+- `output_file`: ruta al archivo `.out` (default: `./OUT_model1/{instancia}.out`)
+- `in_path`: ruta a carpeta con archivos de entrada (default: `./IN`)
+
+**Validaciones (SIN programación lineal):**
+1. ✓ Comienza y termina en centro (nodo 0)
+2. ✓ Respeta capacidad de cada combi
+3. ✓ Respeta ventanas de tiempo [ih_inicio, ih_fin]
+4. ✓ Distancias y tiempos calculados correctamente
+5. ✓ Sin categorías médicas incompatibles
+6. ✓ Beneficio neto calculado correctamente
+
+Retorna: `True` si la solución es válida, `False` en caso contrario
+
+### `utils_salud.py`
+Utilidades compartidas para todas las estrategias.
+
+**Clases:**
+- `Paciente`: id, x, y, ih_inicio, ih_fin, categoria, beneficio
+- `TipoCombi`: nombre, cant_disponible, cant_asientos, costo_operacion
+
+**Funciones de parseo:**
+- `leer_pacientes(archivo)` → (pacientes[], centro)
+- `leer_flota(archivo)` → {tipo_combi: TipoCombi}
+- `leer_incompatibilidades(archivo)` → set de pares incompatibles
+- `distancia_euclidea(p1, p2)` → float
+- `generar_salida(beneficio, rutas, no_atendidos)` → string con formato requerido
+
+## Formato de Entrada
+
+Tres archivos de texto por instancia (ej: "test1"):
+
+### `test1_pacientes.in`
+```
+# id,x,y,ih_inicio,ih_fin,categoria,beneficio
+0,40.0,50.0
+1,25.0,85.0,100,300,Inmunodeprimido,180
+2,22.0,75.0,100,300,Sanitario,210
+```
+
+Nota: `id=0` es el centro médico (sin ventanas de tiempo ni beneficio)
+
+### `test1_flota.in`
+```
+# tipo_combi,cant_disponible,cant_asientos,costo_operacion
+Combi_Chica,5,12,150
+Combi_Mediana,2,20,250
+```
+
+### `test1_incompatibilidades.in`
+```
+# categoria1,categoria2
+Inmunodeprimido,Infeccioso
+Infeccioso,Pediatrico
+```
+
+Líneas vacías se ignoran automáticamente.
+
+## Formato de Salida
+
+Archivo de texto: `./OUT_model1/{instancia}.out`
+
+```
+Z = 540.0
+Combi_Chica: [0 -> 1 -> 3 -> 0]
+Combi_Mediana: [0 -> 2 -> 0]
+No_Atendidos: 4, 5
+```
+
+Formato exacto:
+- Línea 1: `Z = {valor_beneficio_neto}`
+- Líneas 2+: `{tipo_combi}: [{ruta_ordenada}]`
+- Última línea: `No_Atendidos: {lista_o_vacío}`
+
+## Uso
+
+### Resolver una instancia
 ```bash
-pip install pyscipopt
+python Salud/Salud.py <instancia> <threshold>
+
+# Ejemplo: 30 segundos de timeout
+python Salud/Salud.py test1 30
 ```
 
-### Archivos del Proyecto
-
-| Archivo | Descripción |
-|---------|-------------|
-| `main.py` | Script principal que contiene toda la lógica del solver |
-| `input_file.txt` | Archivo de ejemplo para el modelo básico (una fuente, un destino) |
-| `multi_st.txt` | Archivo de ejemplo para múltiples fuentes y destinos |
-| `input_combis_pacientes.txt` | Archivo de ejemplo para modelo VRP básico |
-| `input_combis_pacientes_tiempo.txt` | Archivo de ejemplo para modelo VRPTW |
-| `input_combis_pacientes_categorias.txt` | Archivo de ejemplo para modelo VRP con categorías |
-| `combis_pacientes_modelo.py` | Solver para VRP (ruteo de pacientes) |
-| `combis_pacientes_modelo_tiempo.py` | Solver para VRPTW (ruteo con ventanas de tiempo) |
-| `combis_pacientes_modelo_categorias.py` | Solver para VRP con restricciones de categorías incompatibles |
-| `input_categorias_incompatibles.txt` | Pares de categorías incompatibles para el modelo con categorías |
-| `test_vrp_categorias.py` | Suite de tests (18 tests) para validar el modelo con categorías |
-| `requirements.txt` | Dependencias del proyecto |
-| `README.md` | Este archivo |
-| `main.tex` | Documento LaTeX con todas las formulaciones matemáticas |
-
-### Estructura del Archivo de Entrada
-
-#### Formato General
-
-```
-<número_de_nodos>
-<nombres_nodos>
-<nodo(s)_origen>
-<nodo(s)_destino>
-<número_de_aristas>
-<nodo1> <nodo2> <capacidad>
-<nodo1> <nodo2> <capacidad>
-...
-```
-
-**Notas:**
-- Los nombres de nodos no pueden ser `__SRC__` ni `__SNK__` (reservados internamente)
-- Las fuentes y destinos pueden ser múltiples (separados por espacios)
-- Las aristas son dirigidas: cada arista va de `nodo1` a `nodo2`
-
-#### Ejemplo: Flujo Máximo Clásico (`input_file.txt`)
-
-```
-4
-S A B T
-S
-T
-5
-S A 3
-S B 2
-A B 1
-A T 1
-B T 3
-```
-
-Este ejemplo define una red con:
-- 4 nodos: S (origen), A, B, T (destino)
-- 5 aristas dirigidas con sus capacidades máximas
-
-#### Ejemplo: Múltiples Fuentes y Destinos (`multi_st.txt`)
-
-```
-5
-S1 S2 M T1 T2
-S1 S2
-T1 T2
-4
-S1 M 5
-S2 M 5
-M T1 3
-M T2 3
-```
-
-Este ejemplo define:
-- 2 nodos origen (S1, S2) y 2 nodos destino (T1, T2)
-- El nodo M actúa como punto de distribución intermedio
-
-### Ejecución
-
+### Validar una solución
 ```bash
-# Flujo máximo clásico
-python main.py input_file.txt
+python Salud/SaludTest.py <instancia> [output_file] [in_path]
 
-# Múltiples fuentes y destinos
-python main.py multi_st.txt
+# Ejemplo: validar con rutas estándar
+python Salud/SaludTest.py test1
 
-# Modelos de ruteo de pacientes
-python combis_pacientes_modelo.py input_combis_pacientes.txt
-python combis_pacientes_modelo_tiempo.py input_combis_pacientes_tiempo.txt
-
-# Modelo VRP con restricciones de categorías incompatibles
-python combis_pacientes_modelo_categorias.py
-
-# Tests para modelo con categorías
-python -m unittest test_vrp_categorias -v
+# Ejemplo: validar con ruta explícita
+python Salud/SaludTest.py test1 ./OUT_model1/test1.out ./IN
 ```
 
-### Salida del Programa
-
-El programa muestra:
-- **Estado de la solución**: OPTIMAL o FEASIBLE
-- **Valor del flujo máximo**: Valor total en unidades
-- **Distribución del flujo**: Flujo por cada arista de la red
-
-Ejemplo:
-```
-Status: OPTIMAL
-Maximum Flow Value: 6.0 units
-
-Flow distribution by channels:
-  S1_M ---> 5.000000 units
-  S2_M ---> 1.000000 units
-  M_T1 ---> 3.000000 units
-  M_T2 ---> 3.000000 units
-```
-
----
-
-## Modelos Matemáticos
-
-### a) Modelo de Maximización (Una Fuente, Un Destino)
-
-#### Descripción del Problema
-
-Dado un grafo dirigido con un nodo origen (source), un nodo destino (sink) y aristas dirigidas con capacidades máximas, encontrar el flujo máximo que puede transportarse desde el origen al destino respetando las restricciones de capacidad.
-
-#### Variables de Decisión
-
-- $x_{u,v} \geq 0$: Flujo en la arista dirigida $(u, v)$, restringido a $0 \leq x_{u,v} \leq \text{cap}(u,v)$
-- $F \geq 0$: Flujo total desde origen a destino
-
-#### Función Objetivo
-
-$$\text{Maximizar} \quad F$$
-
-#### Restricciones
-
-1. **Conservación de flujo en origen:**
-   $$\sum_{(s, v)} x_{s,v} = F$$
-
-2. **Conservación de flujo en destino:**
-   $$\sum_{(u, t)} x_{u,t} = F$$
-
-3. **Conservación de flujo en nodos intermedios:**
-   $$\sum_{(u, i)} x_{u,i} = \sum_{(i, v)} x_{i,v} \quad \forall i \notin \{s, t\}$$
-
-4. **Restricciones de capacidad:**
-   $$0 \leq x_{u,v} \leq \text{cap}(u,v) \quad \forall (u,v) \in E$$
-
----
-
-### b) Modelo de Múltiples Fuentes y Destinos
-
-#### Descripción del Problema
-
-Generalización del problema anterior donde existen múltiples nodos origen ($S = \{s_1, s_2, \ldots, s_k\}$) y múltiples nodos destino ($T = \{t_1, t_2, \ldots, t_m\}$). El objetivo es maximizar el flujo total desde cualquier origen a cualquier destino.
-
-#### Reducción a Forma Clásica
-
-Este problema se resuelve mediante la introducción de:
-- **Super-source** $\sigma$: conectado a todas las fuentes con capacidad infinita
-- **Super-sink** $\tau$: conectado desde todos los destinos con capacidad infinita
-
-#### Variables de Decisión
-
-- $x_{u,v}$: Flujo en cada arista (incluyendo aristas del super-source y super-sink)
-- $F$: Flujo total que emerge de la super-source
-
-#### Función Objetivo
-
-$$\text{Maximizar} \quad F$$
-
-#### Restricciones Extendidas
-
-1. **Balance en super-source:**
-   $$\sum_{s \in S} x_{\sigma,s} = F$$
-
-2. **Balance en super-sink:**
-   $$\sum_{t \in T} x_{t,\tau} = F$$
-
-3. **Conservación en todos los nodos intermedios:**
-   $$\sum_{(u, v)} x_{u,v} = \sum_{(v, w)} x_{v,w} \quad \forall v \in V$$
-
-4. **Capacidades originales en aristas de red:**
-   $$x_{u,v} \leq \text{cap}(u,v) \quad \forall (u,v) \in E$$
-
-#### Ejemplo Resuelto
-
-Para `multi_st.txt`:
-- Super-source conecta a S1 y S2
-- Super-sink recibe desde T1 y T2
-- Flujo máximo = 6 unidades: min(cap(s1→m) + cap(s2→m), cap(m→t1) + cap(m→t2)) = min(10, 6) = 6
-
----
-
-### c) Modelo de Centros y Pacientes (VRP)
-
-#### Descripción del Problema
-
-Optimizar el ruteo de un conjunto de vehículos (combis) para visitar a pacientes, minimizando el costo total (tiempo o distancia), sujeto a restricciones de capacidad y opcionalmente ventanas de tiempo.
-
-#### Variables de Decisión
-
-- $x_{i,j,k} \in \{0,1\}$: Indica si la combi $k$ viaja de nodo $i$ a nodo $j$
-- $u_{i,k} \in [1, n]$: Variable auxiliar MTZ (Miller-Tucker-Zemlin) para prevenir subtours
-- $T_{i,k} \geq 0$: Hora de llegada de la combi $k$ al nodo $i$ (solo en VRPTW)
-
-#### Función Objetivo
-
-$$\text{Minimizar} \quad \sum_{i,j,k} d_{i,j} \cdot x_{i,j,k}$$
-
-donde $d_{i,j}$ es la distancia o tiempo entre nodos.
-
-#### Restricciones
-
-1. **Cada paciente es visitado exactamente una vez:**
-   $$\sum_{i,k} x_{i,j,k} = 1 \quad \forall j \in \text{Pacientes}$$
-
-2. **Conservación de flujo (continuidad de rutas):**
-   $$\sum_{i} x_{i,p,k} = \sum_{j} x_{p,j,k} \quad \forall p, k$$
-
-3. **Restricción de capacidad:**
-   $$\sum_{j=1}^{n} x_{i,j,k} \leq \text{capacidad}_k \quad \forall k$$
-
-4. **Eliminación de subtours (MTZ):**
-   $$u_{i,k} - u_{j,k} + n \cdot x_{i,j,k} \leq n - 1 \quad \forall i,j,k$$
-
-5. **Ventanas de tiempo (VRPTW):**
-   $$\text{inicio}_i \leq T_{i,k} \leq \text{fin}_i \quad \forall i,k$$
-   $$T_{j,k} \geq T_{i,k} + d_{i,j} - M(1 - x_{i,j,k}) \quad \forall i,j,k$$
-
----
-
-### d) Modelo de Ruteo de Vehículos con Restricciones de Categorías
-
-#### Descripción del Problema
-
-Extensión del modelo VRPTW donde cada paciente pertenece a exactamente una categoría. Existe un conjunto de pares de categorías incompatibles, lo que significa que una misma combi no puede transportar pacientes de ambas categorías simultáneamente. El problema incluye dos tipos de incompatibilidad:
-
-- **Incompatibilidad no reflexiva** $(c_1, c_2)$ con $c_1 \ne c_2$: Dos categorías distintas que no pueden estar juntas en la misma combi
-- **Incompatibilidad reflexiva** $(c, c)$: Una categoría que puede tener máximo 1 paciente por combi
-
-#### Variables de Decisión
-
-- $x_{i,j,k} \in \{0,1\}$: Indica si la combi $k$ viaja del nodo $i$ al nodo $j$
-- $z_{i,k} \in \{0,1\}$: Indica si la combi $k$ atiende al paciente $i$ (define $z_{i,k} = \sum_{j \ne i} x_{j,i,k}$)
-- $T_{i,k} \geq 0$: Hora de llegada de la combi $k$ al nodo $i$
-- $y_{c,k} \in \{0,1\}$: Indica si la combi $k$ atiende a algún paciente de la categoría $c$
-
-#### Función Objetivo
-
-$$\text{Minimizar} \quad \sum_{i,j,k} d_{i,j} \cdot x_{i,j,k}$$
-
-#### Restricciones Principales
-
-1. **Visita única:** Cada paciente es visitado exactamente una vez
-2. **Conservación de flujo:** Continuidad de rutas
-3. **Capacidad:** Límite de pacientes por combi
-4. **Subtours:** Eliminación usando MTZ
-5. **Definición de atención:** $z_{i,k} = \sum_{j \ne i} x_{j,i,k}$
-6. **Tiempo de propagación:** Relación temporal entre viajes consecutivos
-7. **Ventanas de tiempo:** Restricciones sobre llegada a cada paciente
-8. **Definición de categoría:** $y_{c,k} \geq \sum_{i: \text{cat}_i = c} z_{i,k}$
-9. **Incompatibilidad no reflexiva:** Para $(c_1, c_2)$ con $c_1 \ne c_2$:
-   $$y_{c_1,k} + y_{c_2,k} \leq 1 \quad \forall k$$
-10. **Incompatibilidad reflexiva:** Para $(c, c)$:
-    $$\sum_{i: \text{cat}_i = c} z_{i,k} \leq 1 \quad \forall k$$
-
-#### Ejemplo y Validación
-
-Para el conjunto de datos de ejemplo:
-- **5 pacientes** en 3 categorías: PAMI (2), Contagiosos (1), Mentales (2)
-- **3 combis** con capacidades: 2, 3, 2
-- **3 incompatibilidades**: Contagiosos↔Mentales, Contagiosos↔PAMI, Contagiosos↔Contagiosos (reflexiva)
-
-**Resultado óptimo:** 163 minutos de distancia total
-
-**Validación de restricciones:**
-- Combi_A: PAMI + Mentales ✓ (compatible)
-- Combi_B: Contagiosos (único) ✓ (reflexiva respetada)
-- Combi_C: PAMI + Mentales ✓ (compatible)
-- Todos los turnos respetados ✓
-- Máximo 1 Contagioso por combi ✓
-
----
-
-### e) Modelo de Ruteo de Vehículos con Maximización de Beneficios (Orienteering)
-
-#### Descripción del Problema
-
-Problema donde se debe seleccionar exactamente un vehículo (combi) y diseñar una ruta para ese vehículo, maximizando los beneficios totales. Los beneficios provienen de dos fuentes:
-
-1. **Beneficios de pacientes**: Cada paciente tiene un valor asociado si es visitado
-2. **Beneficio del vehículo**: Cada combi tiene un coeficiente de deseabilidad
-
-A diferencia del VRP clásico, no es obligatorio visitar todos los pacientes. El modelo selecciona un subconjunto óptimo de pacientes y el vehículo más ventajoso para maximizar el beneficio total.
-
-Este es el **Problema de Orienteering con Ventanas de Tiempo (OPTW)**, una variante donde el objetivo es maximizar ganancias en lugar de minimizar costos.
-
-#### Variables de Decisión
-
-- $x_{i,j,k} \in \{0,1\}$: Indica si la combi $k$ viaja de nodo $i$ a nodo $j$
-- $z_{p,k} \in \{0,1\}$: Indica si la combi $k$ atiende al paciente $p$
-- $w_k \in \{0,1\}$: **Variable nueva** - Indica si la combi $k$ es elegida (exactamente una = 1)
-- $u_{i,k} \in [1,n]$: Variable auxiliar MTZ para prevenir subtours
-- $T_{i,k} \geq 0$: Hora de llegada de la combi $k$ al nodo $i$
-
-#### Función Objetivo
-
-$$\text{Maximizar} \quad \sum_{i,k} \text{ben}_i \cdot z_{i,k} + \sum_{k} \text{coef}_k \cdot w_k$$
-
-donde:
-- $\text{ben}_i$ = beneficio de visitar paciente $i$
-- $\text{coef}_k$ = coeficiente de deseabilidad de combi $k$
-
-#### Restricciones Principales
-
-1. **Selección única de vehículo:**
-   $$\sum_{k} w_k = 1$$
-   
-2. **Salida del depósito (solo si vehículo elegido):**
-   $$\sum_{j \ne 0} x_{0,j,k} = w_k \quad \forall k$$
-   
-3. **Regreso al depósito (solo si vehículo elegido):**
-   $$\sum_{i \ne 0} x_{i,0,k} = w_k \quad \forall k$$
-   
-4. **Definición de atención:** $z_{i,k} = \sum_{j \ne i} x_{j,i,k}$
-
-5. **Capacidad acoplada con vehículo:**
-   $$\sum_{p} z_{p,k} \leq \text{cap}_k \cdot w_k \quad \forall k$$
-   Si $w_k = 0$, entonces $z_{p,k} = 0$ para todos los pacientes.
-
-6. **Conservación de flujo:** $\sum_{j \ne p} x_{p,j,k} = z_{p,k}$
-
-7. **Eliminación de subtours (MTZ):** $u_{i,k} - u_{j,k} + n \cdot x_{i,j,k} \leq n - 1$
-
-8. **Propagación de tiempo:** $T_{j,k} \geq T_{i,k} + d_{i,j} - M(1 - x_{i,j,k})$
-
-9. **Ventanas de tiempo:** 
-   - $(turno_i - tolerancia) \cdot z_{i,k} \leq T_{i,k}$
-   - $T_{i,k} \leq turno_i \cdot z_{i,k} + M(1 - z_{i,k})$
-
-#### Diferencias Clave con Modelos Anteriores
-
-| Aspecto | VRP (Modelo c) | VRP+Categorías (Modelo d) | Orienteering (Modelo e) |
-|---------|---|---|---|
-| **Objetivo** | Minimizar distancia | Minimizar distancia | **Maximizar beneficios** |
-| **Vehículos usados** | Múltiples (flexible) | Múltiples (flexible) | **Exactamente 1** |
-| **Pacientes visitados** | Todos obligatoriamente | Todos obligatoriamente | **Subconjunto óptimo** |
-| **Variables nuevas** | Ninguna | $y_{c,k}$ (categoría) | **$w_k$ (vehículo elegido)** |
-| **Decisión principal** | ¿Cómo rutear? | ¿Cómo rutear respetando categorías? | **¿Qué vehículo y qué ruta?** |
-
-#### Ejemplo y Validación
-
-**Datos:**
-- 5 pacientes con beneficios: P1(50.5), P2(120), P3(30), P4(200), P5(80)
-- 3 combis con coeficientes: A(100), B(40), VIP(300)
-- Capacidades: A(3), B(5), VIP(2)
-- Ventanas de tiempo: ±10 minutos alrededor del turno
-
-**Solución óptima: 620.0 unidades de beneficio**
-
-```
-Vehículo elegido: Combi_VIP (Coeficiente: 300.0)
-Ruta: Centro (0) → Paciente 4 → Paciente 2 → Centro (0)
-
-Pacientes recogidos: [2, 4]
-Beneficio de pacientes: 120.0 (P2) + 200.0 (P4) = 320.0
-Beneficio de vehículo: 300.0 (Combi_VIP)
-Beneficio total: 620.0
-Capacidad utilizada: 2/2
-```
-
-**Análisis de optimalidad:**
-
-| Combi | Coef. | Cap. | Beneficio máximo teórico | Real óptimo | Razonamiento |
-|------|-------|------|--------------------------|-------------|---|
-| A | 100 | 3 | 550.5 | ❌ | Capacidad suficiente pero tiempo insuficiente |
-| B | 40 | 5 | 490.5 | ❌ | Capacidad máxima pero coef. bajo |
-| **VIP** | **300** | **2** | **620.0** | **✓ ÓPTIMO** | Coef. alto compensa limitada capacidad |
-
-A pesar de tener la menor capacidad, **Combi_VIP es elegida** porque su alto coeficiente de deseabilidad (300) proporciona un beneficio total superior.
-
-#### Ejecución
-
+### Resolver y validar
 ```bash
-# Ejecutar modelo de Orienteering con beneficios
-python combis_pacientes_con_beneficio/main.py
+python validate_salud.py <instancia> <threshold>
 
-# O alternativamente, desde el directorio específico
-cd combis_pacientes_con_beneficio
-python main.py
+# Ejemplo: ejecuta Salud() + SaludTest()
+python validate_salud.py test1 30
 ```
 
-#### Archivos Relacionados
+### Desde código Python
+```python
+from Salud.Salud import Salud
+from Salud.SaludTest import SaludTest
 
-| Archivo | Descripción |
-|---------|-------------|
-| `combis_pacientes_con_beneficio/combis_pacientes_con_beneficio.py` | Implementación del solver Orienteering |
-| `combis_pacientes_con_beneficio/lector_datos_beneficios.py` | Parser para archivos de entrada |
-| `combis_pacientes_con_beneficio/input_combis_beneficios.txt` | Archivo de datos de ejemplo |
+# Resolver
+Salud("test1", 30.0)
 
----
+# Validar
+SaludTest("test1")
+```
 
+## Modelo Matemático
 
+### Conjuntos
+- `P`: conjunto de pacientes (sin incluir centro)
+- `K`: conjunto de combis (instancias individuales)
+- `T`: tipos de combis
+- `V = {0} ∪ P`: nodos (centro + pacientes)
 
-- El optimizador utiliza **SCIP** (Solving Constraint Integer Programs) como backend
-- Las soluciones se redondean a 6 decimales para legibilidad
-- Se ignoran flujos menores a 1e-6 (considerados cero numérico)
-- Para el problema de múltiples fuentes/destinos, la capacidad de super-source/super-sink se establece como la suma de capacidades salientes totales (Big-M)
-- El tiempo de ejecución es generalmente muy rápido (< 1 segundo) para instancias pequeñas y medianas
+### Variables de Decisión
+- `x[i,j,k]` ∈ {0,1}: arista de i a j con combi k
+- `z[p,k]` ∈ {0,1}: paciente p atendido por combi k
+- `a[p]` ∈ {0,1}: paciente p es atendido (por cualquier combi)
+- `u[k]` ∈ {0,1}: combi k utilizada
+- `T[i,k]` ≥ 0: tiempo de llegada al nodo i con combi k
+
+### Función Objetivo
+```
+max: Σ(beneficio[p] × a[p]) - Σ(costo[tipo(k)] × u[k])
+```
+
+### Restricciones Principales
+1. **Cobertura**: Cada paciente atendido por máximo una combi
+2. **Flujo**: Balance de entrada/salida en nodos
+3. **Centro**: Salida y regreso obligatorios en centro
+4. **Capacidad**: Respeto de asientos por combi
+5. **Ventanas de tiempo**: Respeto de intervalos horarios
+6. **Incompatibilidades**: Categorías incompatibles no comparten combi
+
+## Test Instances
+
+Incluidas en `./IN/`:
+
+| Instancia | Pacientes | Combis | Incomp. | Beneficio | Validación |
+|-----------|-----------|--------|---------|-----------|-----------|
+| test1     | 3         | 2      | 0       | 390.0     | ✓ Válida  |
+| test2     | 5         | 3      | 2       | 640.0     | ✓ Válida  |
+| test3     | 7         | 3      | 3       | 1110.0    | ✓ Válida  |
+
+## Notas Técnicas
+
+- **Solver**: PySCIPOpt (SCIP)
+- **Timeout seguro**: `model.setParam("limits/time", threshold)`
+- **Big-M**: 10000 (para ventanas de tiempo)
+- **Distancia**: Euclidea desde coordenadas
+- **Velocidad**: 1 unidad de distancia por unidad de tiempo
+- **Múltiples combis**: Cada instancia tiene ID único para distintas asignaciones
+- **Beneficio neto**: Σ(beneficio_pacientes_atendidos) - Σ(costo_combis_utilizadas)
+
+## Limitaciones
+
+- Modelo compacto (no descomposición)
+- Sin cortes ni preprocesamiento avanzado
+- Mejor para instancias pequeñas/medianas (< 50 pacientes)
+- Para instancias grandes, considerar Column Generation (Estrategia 2)
+
+## Próximos Pasos
+
+1. **SaludCG** - Column Generation
+2. **SaludChallenger** - Branch & Price + mejoras
+3. **evaluador.py** - Evaluación comparativa
+4. **Informe** - Documentación completa
