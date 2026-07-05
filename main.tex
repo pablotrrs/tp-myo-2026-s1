@@ -253,6 +253,14 @@ donde $\mathcal{I}_{\text{pacientes}} = \{(p,q) : \text{categoria}[p], \text{cat
 
 Si dos pacientes pertenecen a categorías incompatibles, no pueden estar en el mismo vehículo.
 
+\paragraph{7. Vínculo entre llegar al vértice y atender al paciente }
+
+\begin{align}
+ z[p, k] \le \sum_{i \in P,i \neq p} x[i, p, k] \quad &\forall k \in K, p \in P  \label{eq:vinczx}
+\end{align}
+
+Si un paciente p es atendido por la combi k, dicha combi debe haber pasado por el vértice de p al menos una vez.
+
 \subsubsection{Explicación de la Función Objetivo y Restricciones}
 
 \paragraph{Función Objetivo (Ec. \eqref{eq:obj})}
@@ -316,6 +324,13 @@ Aseguran que:
 \begin{itemize}
     \item Dos pacientes con categorías médicas incompatibles \textbf{no pueden compartir vehículo}
     \item Previene conflictos por bioseguridad o protocolo médico
+\end{itemize}
+
+\paragraph{Vínculo entre llegar al vértice y atender al paciente (Ec. \eqref{eq:vinczx})}
+Asegura que:
+\begin{itemize}
+    \item Si un paciente fue atendido, entonces al menos una combi pasó por su ubicación.
+    \item Si ninguna combi pasó por su ubicación, entonces no fue atendido.
 \end{itemize}
 
 \newpage
