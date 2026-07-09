@@ -18,6 +18,25 @@ from Salud.utils_salud import (
     generar_matriz_distancias, generar_salida
 )
 
+def generar_rutas_iniciales_basicas(pacientes: List[Paciente], centro: Paciente, flota: Dict[str, TipoCombi], distancias: dict) -> List[dict]:
+    rutas = []
+    tipo_default = list(flota.keys())[0]
+    
+    for p in pacientes:
+        dist_ida = distancias.get((centro.id, p.id), 0)
+        dist_vuelta = distancias.get((p.id, centro.id), 0)
+        dist_total = dist_ida + dist_vuelta
+        
+        tiempo_llegada = dist_ida
+        if tiempo_llegada <= p.ih_fin:
+            nueva_ruta = {
+                "tipo_combi": tipo_default,
+                "pacientes_ids": [p.id],
+                "camino": [centro.id, p.id, centro.id],
+                "rentabilidad": p.beneficio - flota[tipo_default].costo_operacion
+            }
+            rutas.append(nueva_ruta)
+    return rutas
 
 def construir_subproblema_base(tipo_k: str, combi_info: TipoCombi, pacientes: List[Paciente], 
                                centro: Paciente, distancias: dict, incomp: set, M: float) -> Tuple[Model, dict, dict]:
@@ -171,7 +190,7 @@ def SaludCG(instancia: str, threshold: float) -> bool:
             submodelos[tipo_k] = construir_subproblema_base(tipo_k, combi_info, pacientes, centro, distancias, incomp, M)
         
         # Pool dinámico de columnas (rutas iniciales vacías, CG generará las necesarias)
-        pool_rutas = [] 
+        pool_rutas = generar_rutas_iniciales_basicas(pacientes, centro, flota, distancias)
         
         # ===== BUCLE PRINCIPAL DE GENERACIÓN DE COLUMNAS =====
         iteracion = 0
@@ -275,6 +294,11 @@ def SaludCG(instancia: str, threshold: float) -> bool:
                     
         no_atendidos = [p.id for p in pacientes if p.id not in pacientes_atendidos]
         
+        print(f"DEBUG: Pacientes atendidos: {len(pacientes_atendidos)}")
+        print(f"DEBUG: Rutas elegidas: {len(rutas_finales)}")
+        for r in rutas_finales:
+            print(f"Ruta: {r[1]}")
+
         # ===== GENERAR ARCHIVO DE SALIDA FORMATO ESTRICTO =====
         salida_contenido = generar_salida(beneficio_total, rutas_finales, no_atendidos)
         # Quitar los espacios de las flechas para ser 100% compatibles con la corrección del corrector automático

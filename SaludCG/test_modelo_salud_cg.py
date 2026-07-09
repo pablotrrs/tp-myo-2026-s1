@@ -29,7 +29,8 @@ class TestModeloSaludCG(unittest.TestCase):
         archivos_a_borrar = (["test_optimo", "test_cap", "test_incomp", "test_perdida", "test_beneficio_negativo", "test_cantidad_supera_calidad",
                                "test_calidad_supera_cantidad", "test_combi_mayor_costo_mayor_beneficio", "test_combi_menor_costo_mayor_beneficio",
                                "test_paciente_lejano_mejor_beneficio", "test_paciente_lejano_no_da_mejor_beneficio", "test_dos_combis_pueden_buscar_paciente_lejano",
-                               "test_paciente_inalcanzable", "test_orden_ventanas", "test_incomp_multi_combi", "test_propagacion_espera"])
+                               "test_paciente_inalcanzable", "test_orden_ventanas", "test_incomp_multi_combi", "test_propagacion_espera",
+                                "test_dos_combis_con_uno_de_capacidad"])
         for archivo in archivos_a_borrar:
             ruta = f"./IN/{archivo}_pacientes.in"
             if os.path.exists(ruta):
@@ -343,14 +344,14 @@ class TestModeloSaludCG(unittest.TestCase):
                 ["1", 0.0, 10.0, 0, 50, "Infeccioso", 100],
                 ["2", 0.0, -10.0, 0, 50, "Inmunodeprimido", 100],
             ],
-            flota=[["Combi_A", 2, 2, 30]],
+            flota=[["Combi_A", 2, 2, 10]],
             incompatibilidades=[["Infeccioso", "Inmunodeprimido"]]
         )
         
         SaludCG(nombre_test, threshold=10.0)
         beneficio, rutas, no_atendidos = self.leer_resultado(nombre_test)
         
-        self.assertEqual(beneficio, 140.0, "El beneficio óptimo es 140 (100+100 - 30-30).")
+        self.assertEqual(beneficio, 180.0, "El beneficio óptimo es 180.")
         self.assertEqual(len(rutas), 2, "Debería haber utilizado las 2 combis para aislar a los pacientes.")
         self.assertEqual(no_atendidos, [], "Nadie debería quedar sin atender.")
 
@@ -372,6 +373,25 @@ class TestModeloSaludCG(unittest.TestCase):
         self.assertEqual(beneficio, 140.0, "El beneficio óptimo es 140 (atender solo a P2).")
         self.assertEqual(rutas[0][1], [0, 2, 0], "Solo debió ir a buscar a P2.")
         self.assertIn(1, no_atendidos, "El paciente 1 debió quedar afuera porque el tiempo de espera arruinaba la ruta.")
+    
+    def test_17_dos_combis_con_uno_de_capacidad(self):
+        nombre_test = "test_dos_combis_con_uno_de_capacidad"
+        self.crear_instancia(
+            nombre_test,
+            pacientes=[
+                ["1", 0.0, 20.0, 0, 100, "Común", 100], 
+                ["2", 0.0, 10.0, 0, 100, "Común", 150],  
+            ],
+            flota=[["Combi_A", 1, 1, 10], ["Combi_B", 1, 1, 10]],
+            incompatibilidades=[]
+        )
+        
+        SaludCG(nombre_test, threshold=10.0)
+        beneficio, rutas, no_atendidos = self.leer_resultado(nombre_test)
+        
+        self.assertEqual(beneficio, 230.0, "El beneficio óptimo es 230.")
+        self.assertEqual(len(rutas), 2, "Deberían haber 2 rutas, una por cada combi")
+        self.assertEqual([], no_atendidos, "Todos los pacientes deberían quedar atendidos.")
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

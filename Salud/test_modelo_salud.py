@@ -369,6 +369,25 @@ class TestModeloSalud(unittest.TestCase):
         self.assertEqual(beneficio, 140.0, "El beneficio óptimo es 140 (atender solo a P2).")
         self.assertEqual(rutas[0][1], [0, 2, 0], "Solo debió ir a buscar a P2.")
         self.assertIn(1, no_atendidos, "El paciente 1 debió quedar afuera porque el tiempo de espera arruinaba la ruta.")
+    
+    def test_17_dos_combis_con_uno_de_capacidad(self):
+        nombre_test = "test_dos_combis_con_uno_de_capacidad"
+        self.crear_instancia(
+            nombre_test,
+            pacientes=[
+                ["1", 0.0, 20.0, 0, 100, "Común", 100], 
+                ["2", 0.0, 10.0, 0, 100, "Común", 150],  
+            ],
+            flota=[["Combi_A", 1, 1, 10], ["Combi_B", 1, 1, 10]],
+            incompatibilidades=[]
+        )
+        
+        Salud(nombre_test, threshold=10.0)
+        beneficio, rutas, no_atendidos = self.leer_resultado(nombre_test)
+        
+        self.assertEqual(beneficio, 230.0, "El beneficio óptimo es 230.")
+        self.assertEqual(len(rutas), 2, "Deberían haber 2 rutas, una por cada combi")
+        self.assertEqual([], no_atendidos, "Todos los pacientes deberían quedar atendidos.")
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
