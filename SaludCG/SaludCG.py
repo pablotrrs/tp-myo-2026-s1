@@ -8,7 +8,7 @@ import os
 import time
 from typing import Tuple, List, Dict
 
-root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(root)
 
 from pyscipopt import Model, quicksum
@@ -97,7 +97,7 @@ def resolver_pricing(modelo_pricing: Model, x: dict, z: dict, tipo_k: str, combi
     modelo_pricing.optimize()
 
     status = modelo_pricing.getStatus()
-    if status in ["optimal", "timelimit", "gaplimit"] and modelo_pricing.getSolCount() > 0:
+    if status in ["optimal", "timelimit", "gaplimit"] and len(modelo_pricing.getSols()) > 0:
         obj_val = modelo_pricing.getObjVal()
         ganancia_reducida = obj_val - combi_info.costo_operacion - dual_mu
         
@@ -188,7 +188,7 @@ def SaludCG(instancia: str, threshold: float) -> bool:
             # Variables de selección continuas [0, 1]
             y = {}
             for idx, r in enumerate(pool_rutas):
-                y[idx] = maestro_rl.addVar(vtype="C", lb=0, ub=1, name=f"y_{idx}")
+                y[idx] = maestro_rl.addVar(vtype="C", lb=0, name=f"y_{idx}")
                 
             # FO del maestro: Maximize rentabilidad total del pool
             maestro_rl.setObjective(quicksum(r["rentabilidad"] * y[idx] for idx, r in enumerate(pool_rutas)), "maximize")
@@ -221,13 +221,18 @@ def SaludCG(instancia: str, threshold: float) -> bool:
             # Resolver el pricing por cada tipo de combi de la flota
             rutas_agregadas = 0
             for tipo_k, combi_info in flota.items():
-                p_model, p_x, p_z = submodelos[tipo_k]
                 encontrada, nueva_ruta, gr = resolver_pricing(
-                    p_model, p_x, p_z, tipo_k, combi_info, pacientes, centro, distancias, pac_dict, dual_pi, dual_mu[tipo_k], 10.0
+                    submodelos[tipo_k][0], submodelos[tipo_k][1], submodelos[tipo_k][2],
+                    tipo_k, combi_info, pacientes, centro, distancias, pac_dict, 
+                    dual_pi, dual_mu.get(tipo_k, 0.0), 10.0
                 )
                 if encontrada:
-                    pool_rutas.append(nueva_ruta)
-                    rutas_agregadas += 1
+                    # Comprobar que el pricing no haya devuelto una ruta idéntica
+                    ya_existe = any(r["camino"] == nueva_ruta["camino"] and r["tipo_combi"] == nueva_ruta["tipo_combi"] for r in pool_rutas)
+                    
+                    if not ya_existe:
+                        pool_rutas.append(nueva_ruta)
+                        rutas_agregadas += 1
 
             # Si ningún subproblema encontró columnas rentables, alcanzamos la optimalidad continua
             if rutas_agregadas == 0:
@@ -261,7 +266,7 @@ def SaludCG(instancia: str, threshold: float) -> bool:
         rutas_finales = []
         pacientes_atendidos = set()
         
-        if maestro_ip.getSolCount() > 0:
+        if len(maestro_ip.getSols()) > 0:
             beneficio_total = maestro_ip.getObjVal()
             for idx, r in enumerate(pool_rutas):
                 if maestro_ip.getVal(y_int[idx]) > 0.5:

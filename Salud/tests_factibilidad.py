@@ -3,7 +3,7 @@ import os
 import shutil
 from SaludTest import SaludTest
 
-class TestSaludValidacion(unittest.TestCase):
+class TestFactibilidad(unittest.TestCase):
     
     @classmethod
     def setUpClass(cls):
@@ -147,10 +147,9 @@ class TestSaludValidacion(unittest.TestCase):
         )
         ruta_out = self.guardar_salida_mock(salida)
         es_valido = SaludTest("test_base", ruta_out, "./IN_TEST")
-        self.assertFalse(es_valido, "Debería fallar: La ruta no termina en el centro (0).")
+        self.assertFalse(es_valido, "Debería fallar: La ruta no comienza en el centro (0).")
 
     def test_08_combi_inexistente(self):
-        """Verifica que falle si se inventa una combi que no está en el archivo de flota."""
         salida = (
             "Z = 50.0\n"
             "Combi_Inexistente: [0 -> 1 -> 0]\n"
@@ -203,9 +202,17 @@ class TestSaludValidacion(unittest.TestCase):
         ruta_out = self.guardar_salida_mock(salida, "test_multi.out")
         es_valido = SaludTest("test_multi", ruta_out, "./IN_TEST")
         self.assertTrue(es_valido, "Debería ser válido: Rutas múltiples procesadas correctamente.")
+    
+    def test_12_paciente_inexistente(self):
+        salida = (
+            "Z = 50.0\n"
+            "Combi_A: [0 -> 3 -> 0]\n" #El paciente 3 no existe
+            "No_Atendidos: \n"
+        )
+        ruta_out = self.guardar_salida_mock(salida)
+        es_valido = SaludTest("test_base", ruta_out, "./IN_TEST")
+        self.assertFalse(es_valido, "Debería fallar: No existe el paciente 3 en la lista de pacientes.")
+
 
 if __name__ == '__main__':
-    import io
-    import sys
-
     unittest.main(verbosity=2)
