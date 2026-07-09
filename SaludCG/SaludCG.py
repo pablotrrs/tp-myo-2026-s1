@@ -310,8 +310,8 @@ def SaludCG(instancia: str, threshold: float) -> bool:
         with open(archivo_salida, 'w') as f:
             f.write(salida_contenido)
             
-        print(f"✓ Output generado exitosamente: {archivo_salida}")
-        print(f"✓ Beneficio Neto Final Obtenido: {beneficio_total:.2f}")
+        print(f"[OK] Output generado exitosamente: {archivo_salida}")
+        print(f"[OK] Beneficio Neto Final Obtenido: {beneficio_total:.2f}")
         return True
         
     except Exception as e:

@@ -346,9 +346,9 @@ def Salud(instancia: str, threshold: float) -> bool:
         flota = leer_flota(archivo_flota)
         incomp = leer_incompatibilidades(archivo_incomp)
         
-        print(f"  ✓ {len(pacientes)} pacientes")
-        print(f"  ✓ {len(flota)} tipos de combi")
-        print(f"  ✓ Centro médico en ({centro.x}, {centro.y})")
+        print(f"  [OK] {len(pacientes)} pacientes")
+        print(f"  [OK] {len(flota)} tipos de combi")
+        print(f"  [OK] Centro médico en ({centro.x}, {centro.y})")
         
         # Validar
         validar_entrada(pacientes, flota, incomp)
@@ -357,8 +357,8 @@ def Salud(instancia: str, threshold: float) -> bool:
         print("\n[2/4] Construyendo modelo MILP...")
         modelo, vars_dict = construir_modelo_milp(pacientes, centro, flota, incomp)
         
-        print(f"  ✓ Variables: {modelo.getNVars()}")
-        print(f"  ✓ Restricciones: {modelo.getNConss()}")
+        print(f"  [OK] Variables: {modelo.getNVars()}")
+        print(f"  [OK] Restricciones: {modelo.getNConss()}")
         
         # ===== CONFIGURAR TIMEOUT =====
         print(f"\n[3/4] Resolviendo (timeout: {threshold}s)...")
@@ -372,9 +372,9 @@ def Salud(instancia: str, threshold: float) -> bool:
         print(f"\n[4/4] Extrayendo solución...")
         beneficio, rutas, no_atendidos = extraer_solucion(modelo, vars_dict)
         
-        print(f"  ✓ Beneficio: {beneficio:.2f}")
-        print(f"  ✓ Rutas: {len(rutas)}")
-        print(f"  ✓ Pacientes no atendidos: {len(no_atendidos)}")
+        print(f"  [OK] Beneficio: {beneficio:.2f}")
+        print(f"  [OK] Rutas: {len(rutas)}")
+        print(f"  [OK] Pacientes no atendidos: {len(no_atendidos)}")
         
         # ===== GENERAR OUTPUT =====
         salida_contenido = generar_salida(beneficio, rutas, no_atendidos)
@@ -386,13 +386,13 @@ def Salud(instancia: str, threshold: float) -> bool:
         with open(archivo_salida, 'w') as f:
             f.write(salida_contenido)
         
-        print(f"\n✓ Salida guardada en: {archivo_salida}")
+        print(f"\n[OK] Salida guardada en: {archivo_salida}")
         print(f"{'='*70}\n")
         
         return True
         
     except Exception as e:
-        print(f"\n✗ Error: {e}")
+        print(f"\n[ERROR] Error: {e}")
         import traceback
         traceback.print_exc()
         return False
