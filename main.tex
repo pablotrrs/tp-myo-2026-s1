@@ -358,20 +358,72 @@ El proceso itera hasta convergencia LP, permitiendo manejar instancias más gran
 
 \subsection{Descripción de la Estrategia}
 
-[SECCIÓN A COMPLETAR]
+La estrategia SaludChallenger integra la Generación de Columnas de la Estrategia 2 dentro de un esquema de \textbf{Branch \& Price}: un árbol de branch \& bound en el que la relajación lineal de \emph{cada nodo} se resuelve mediante generación de columnas. A diferencia de SaludCG, que al terminar la fase de generación resuelve el maestro entero sobre el pool de columnas disponible (una heurística que no garantiza optimalidad entera), SaludChallenger ramifica sobre las soluciones fraccionarias y explora el árbol hasta \textbf{probar optimalidad entera} (o agotar el tiempo disponible).
 
-La estrategia SaludChallenger mejora el enfoque de Generación de Columnas mediante técnicas avanzadas como:
+Las mejoras implementadas son:
 
 \begin{itemize}
-    \item \textbf{Branch \& Price}: Integración de generación de columnas con branch-and-bound para optimalidad entera
-    \item \textbf{Inicialización eficiente}: Generación inteligente de columnas iniciales
-    \item \textbf{Eliminación de columnas}: Remoción de rutas no utilizadas después de $k$ iteraciones sin uso
-    \item \textbf{Warm-starting}: Aprovechamiento de soluciones previas
+    \item \textbf{Branch \& Price}: generación de columnas en cada nodo del árbol, con ramificación de \emph{Ryan-Foster} sobre pares de pacientes, complementada con ramificación sobre la atención de un paciente y sobre la cantidad de vehículos usados por tipo de combi. La exploración es \emph{best-first} (se procesa primero el nodo con mejor cota) y los nodos cuya cota LP no supera al incumbente se podan.
+    \item \textbf{Inicialización eficiente}: el pool inicial se construye con todas las rutas \emph{singleton} factibles (ida y vuelta a cada paciente alcanzable, por cada tipo de combi) más rutas multi-paciente generadas por una heurística golosa que ordena por beneficio y respeta ventanas de tiempo, capacidad e incompatibilidades.
+    \item \textbf{Eliminación de columnas}: las rutas que acumulan $K = 25$ resoluciones consecutivas del maestro con valor cero se marcan como eliminadas y dejan de participar. Como el pricing puede regenerarlas si vuelven a ser necesarias, esta limpieza no compromete la exactitud del método.
+    \item \textbf{Warm-starting}: el pool de columnas es global y se comparte entre todos los nodos del árbol (cada nodo filtra las columnas compatibles con sus decisiones de ramificación), y el incumbente inicial se obtiene resolviendo el maestro entero sobre las columnas heurísticas antes de comenzar la exploración, lo que habilita podas tempranas.
+\end{itemize}
+
+\textbf{Ventajas:}
+\begin{itemize}
+    \item Garantiza optimalidad entera (a diferencia de la heurística final de SaludCG)
+    \item Cotas duales válidas en todo momento, lo que permite medir el gap de optimalidad
+    \item El maestro trabaja con pocas variables (solo las rutas generadas)
+\end{itemize}
+
+\textbf{Limitaciones:}
+\begin{itemize}
+    \item El subproblema de pricing sigue siendo un MILP de ruteo (NP-difícil)
+    \item El árbol de ramificación puede crecer en instancias con mucha simetría
 \end{itemize}
 
 \subsection{Modelo Matemático}
 
-[A COMPLETAR]
+\subsubsection{Problema Maestro}
+
+Sea $\Omega_t$ el conjunto de rutas factibles para el tipo de combi $t \in T$ (rutas que parten y regresan al centro, respetan capacidad, ventanas de tiempo e incompatibilidades) y $\Omega = \bigcup_{t \in T} \Omega_t$. Para cada ruta $r \in \Omega_t$ se define:
+
+\begin{itemize}
+    \item $a_{pr} \in \{0,1\}$: igual a 1 si la ruta $r$ atiende al paciente $p$
+    \item $c_r = \sum_{p \in P} a_{pr} \cdot \text{beneficio}[p] - \text{costo}[t]$: rentabilidad neta de la ruta
+    \item $\text{disp}[t]$: cantidad de combis disponibles del tipo $t$
+\end{itemize}
+
+Con la variable de decisión $y_r \in \{0,1\}$ (la ruta $r$ se ejecuta o no):
+
+\begin{align}
+  \max & \quad Z = \sum_{r \in \Omega} c_r \cdot y_r \label{eq:bp_obj}\\
+  \text{s.a.} & \quad \sum_{r \in \Omega} a_{pr} \cdot y_r \leq 1 \quad \forall p \in P \label{eq:bp_cover}\\
+  & \quad \sum_{r \in \Omega_t} y_r \leq \text{disp}[t] \quad \forall t \in T \label{eq:bp_fleet}\\
+  & \quad y_r \in \{0, 1\} \quad \forall r \in \Omega \label{eq:bp_bin}
+\end{align}
+
+La ecuación \eqref{eq:bp_cover} asegura que cada paciente sea atendido a lo sumo una vez y la ecuación \eqref{eq:bp_fleet} que no se usen más vehículos de los disponibles por tipo. Como $|\Omega|$ es exponencial, en cada nodo del árbol se resuelve la relajación lineal ($y_r \geq 0$) sobre un subconjunto de columnas, agregando nuevas rutas mediante el subproblema de pricing.
+
+\subsubsection{Subproblema de Pricing}
+
+Sean $\pi_p$ los duales de \eqref{eq:bp_cover} y $\mu_t$ los duales de \eqref{eq:bp_fleet}. Para cada tipo $t$ se busca la ruta factible que maximiza la ganancia reducida, resolviendo un MILP de ruteo de un solo vehículo (variables $x_{ij}$, $z_p$, $T_i$ análogas a las del modelo compacto, más una variable de orden $u_p$ tipo MTZ que elimina subtours incluso entre pacientes a distancia cero):
+
+\begin{align}
+  \max & \quad \sum_{p \in P} (\text{beneficio}[p] - \pi_p) \cdot z_p \label{eq:bp_pricing}
+\end{align}
+
+sujeto a las restricciones de flujo, capacidad, ventanas de tiempo e incompatibilidades para un vehículo del tipo $t$. Si el óptimo $\theta_t^*$ cumple $\theta_t^* - \text{costo}[t] - \mu_t > \varepsilon$, la ruta encontrada se agrega al pool como nueva columna. Cuando ningún tipo aporta columnas con ganancia reducida positiva, la relajación del nodo es óptima.
+
+\subsubsection{Reglas de Ramificación}
+
+Si la solución LP del nodo es fraccionaria, se ramifica con la primera regla aplicable:
+
+\begin{enumerate}
+    \item \textbf{Ryan-Foster (pares de pacientes)}: se elige el par $(p,q)$ cuyo valor $\sum_{r:\, p,q \in r} y_r$ es más fraccionario. En la rama \emph{juntos} se exige $z_p = z_q$ en el pricing (y se descartan las columnas que contienen exactamente uno de los dos); en la rama \emph{separados} se exige $z_p + z_q \leq 1$ (y se descartan las columnas que contienen a ambos).
+    \item \textbf{Atención de un paciente}: si $\sum_{r} a_{pr} \cdot y_r$ es fraccionario, en una rama se fuerza la atención de $p$ (la restricción \eqref{eq:bp_cover} pasa a igualdad, manteniendo la factibilidad del LP con una variable artificial penalizada) y en la otra se prohíbe ($z_p = 0$ en el pricing).
+    \item \textbf{Vehículos por tipo}: si la cantidad de vehículos usados de un tipo $t$ toma un valor fraccionario $v$, se ramifica en $\sum_{r \in \Omega_t} y_r \leq \floor{v}$ y $\sum_{r \in \Omega_t} y_r \geq \ceil{v}$.
+\end{enumerate}
 
 \newpage
 \section{Evaluación Comparativa}
@@ -402,33 +454,33 @@ La estrategia SaludChallenger mejora el enfoque de Generación de Columnas media
 \cline{3-5}
 & & Salud & SaludCG & Challenger & \\
 \hline
-\multirow{5}{*}{\texttt{test1}} 
-& Mejor objetivo & 390.0 & - & - & 390.0 \\
-& Cota dual & 390.0 & - & - & 390.0 \\
-& \# variables & 143 & - & - & - \\
-& \# restricciones & 171 & - & - & - \\
-& Tiempo (s) & 0.45 & - & - & - \\
+\multirow{5}{*}{\texttt{test1}}
+& Mejor objetivo & 390.0 & - & 390.0 & 390.0 \\
+& Cota dual & 390.0 & - & 390.0 & 390.0 \\
+& \# variables & 143 & - & 8 & - \\
+& \# restricciones & 171 & - & 5 & - \\
+& Tiempo (s) & 0.45 & - & \textbf{0.04} & - \\
 \hline
-\multirow{5}{*}{\texttt{test2}} 
-& Mejor objetivo & 640.0 & - & - & 640.0 \\
-& Cota dual & 640.0 & - & - & 640.0 \\
-& \# variables & 244 & - & - & - \\
-& \# restricciones & 284 & - & - & - \\
-& Tiempo (s) & 0.32 & - & - & - \\
+\multirow{5}{*}{\texttt{test2}}
+& Mejor objetivo & 640.0 & - & 640.0 & 640.0 \\
+& Cota dual & 640.0 & - & 640.0 & 640.0 \\
+& \# variables & 244 & - & 21 & - \\
+& \# restricciones & 284 & - & 8 & - \\
+& Tiempo (s) & 0.32 & - & \textbf{0.12} & - \\
 \hline
-\multirow{5}{*}{\texttt{test3}} 
-& Mejor objetivo & 1110.0 & - & - & 1110.0 \\
-& Cota dual & 1110.0 & - & - & 1110.0 \\
-& \# variables & 367 & - & - & - \\
-& \# restricciones & 427 & - & - & - \\
-& Tiempo (s) & 0.28 & - & - & - \\
+\multirow{5}{*}{\texttt{test3}}
+& Mejor objetivo & 1110.0 & - & 1110.0 & 1110.0 \\
+& Cota dual & 1110.0 & - & 1110.0 & 1110.0 \\
+& \# variables & 367 & - & 27 & - \\
+& \# restricciones & 427 & - & 10 & - \\
+& Tiempo (s) & 0.28 & - & \textbf{0.24} & - \\
 \hline
-\multirow{5}{*}{\texttt{test4}} 
-& Mejor objetivo & 350.0 & - & - & 350.0 \\
-& Cota dual & 350.0 & - & - & 350.0 \\
-& \# variables & 244 & - & - & - \\
-& \# restricciones & 284 & - & - & - \\
-& Tiempo (s) & 0.41 & - & - & - \\
+\multirow{5}{*}{\texttt{test4}}
+& Mejor objetivo & 20.0 & - & 20.0 & 20.0 \\
+& Cota dual & 20.0 & - & 20.0 & 20.0 \\
+& \# variables & 244 & - & 12 & - \\
+& \# restricciones & 284 & - & 6 & - \\
+& Tiempo (s) & 0.41 & - & \textbf{0.06} & - \\
 \hline
 \end{tabular}
 \caption{Resultados comparativos de las tres estrategias. En negrita se destaca el mejor valor para cada métrica.}
@@ -440,8 +492,8 @@ La estrategia SaludChallenger mejora el enfoque de Generación de Columnas media
 \begin{itemize}
     \item \textbf{Mejor objetivo}: Valor de la función objetivo $Z$ encontrado (beneficio neto)
     \item \textbf{Cota dual}: Valor objetivo de la relajación lineal (proporciona cota inferior)
-    \item \textbf{\# variables}: Cantidad total de variables en el modelo
-    \item \textbf{\# restricciones}: Cantidad total de restricciones en el modelo
+    \item \textbf{\# variables}: Cantidad total de variables en el modelo. Para las estrategias basadas en generación de columnas (SaludCG y Challenger) se reporta la cantidad de columnas (rutas) generadas en el problema maestro
+    \item \textbf{\# restricciones}: Cantidad total de restricciones en el modelo. Para SaludCG y Challenger se reportan las restricciones del maestro ($|P| + |T|$)
     \item \textbf{Tiempo (s)}: Tiempo de ejecución en segundos
     \item \textbf{-}: No aplicable o no completado aún
 \end{itemize}
@@ -455,6 +507,8 @@ La estrategia SaludChallenger mejora el enfoque de Generación de Columnas media
 
 \begin{itemize}
     \item La Estrategia 1 (Salud MILP compacto) resuelve correctamente todas las instancias a optimalidad
+    \item La Estrategia 3 (SaludChallenger, Branch \& Price) alcanza el mismo óptimo en las cuatro instancias y lo prueba en el nodo raíz del árbol: la relajación por rutas es tan ajustada que la generación de columnas ya entrega soluciones enteras, sin necesidad de ramificar
+    \item El maestro de la Estrategia 3 requiere órdenes de magnitud menos variables que el modelo compacto (por ejemplo, 27 columnas contra 367 variables en \texttt{test3}), lo que anticipa una mejor escalabilidad en instancias grandes
     \item Los tiempos de ejecución son muy bajos (< 1 segundo) para las instancias de prueba
     \item La validación sin LP (SaludTest) funciona correctamente, confirmando factibilidad de todas las soluciones
 \end{itemize}
