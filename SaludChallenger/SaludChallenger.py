@@ -16,7 +16,7 @@ from typing import Dict, FrozenSet, List, Optional, Tuple
 root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(root)
 
-from pyscipopt import Model, quicksum
+from pyscipopt import Model, quicksum, SCIP_PARAMSETTING
 from Salud.utils_salud import (
     Paciente, TipoCombi,
     leer_pacientes, leer_flota, leer_incompatibilidades,
@@ -242,7 +242,11 @@ def resolver_maestro_lp(pool: List[dict], activos: List[int], pacientes: List[Pa
     """Relajación LP del maestro restringido en el nodo. Devuelve obj, y, duales y uso de artificiales."""
     m = Model("Maestro_LP")
     m.setParam("display/verblevel", 0)
-    m.setParam("presolving/maxrounds", 0)
+    # Sin presolve, heurísticas ni propagación: si SCIP reduce el problema,
+    # los duales de las restricciones originales se pierden o quedan corruptos
+    m.setPresolve(SCIP_PARAMSETTING.OFF)
+    m.setHeuristics(SCIP_PARAMSETTING.OFF)
+    m.disablePropagation()
 
     y = {idx: m.addVar(vtype="C", lb=0, name=f"y_{idx}") for idx in activos}
     artificiales = []
@@ -284,10 +288,12 @@ def resolver_maestro_lp(pool: List[dict], activos: List[int], pacientes: List[Pa
 
     yvals = {idx: m.getVal(var) for idx, var in y.items()}
 
+    # En problemas de maximización SCIP devuelve los duales de su problema
+    # interno de minimización: hay que negarlos para obtener los duales reales
     dual_pi = {}
     for pid, cons in cons_pac.items():
         try:
-            dual_pi[pid] = m.getDualsolLinear(cons)
+            dual_pi[pid] = -m.getDualsolLinear(cons)
         except Exception:
             dual_pi[pid] = 0.0
 
@@ -295,12 +301,12 @@ def resolver_maestro_lp(pool: List[dict], activos: List[int], pacientes: List[Pa
     for tipo in flota:
         val = 0.0
         try:
-            val += m.getDualsolLinear(cons_ub[tipo])
+            val += -m.getDualsolLinear(cons_ub[tipo])
         except Exception:
             pass
         if tipo in cons_lb:
             try:
-                val += m.getDualsolLinear(cons_lb[tipo])
+                val += -m.getDualsolLinear(cons_lb[tipo])
             except Exception:
                 pass
         dual_mu[tipo] = val

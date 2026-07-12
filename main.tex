@@ -457,30 +457,30 @@ Si la solución LP del nodo es fraccionaria, se ramifica con la primera regla ap
 \multirow{5}{*}{\texttt{test1}}
 & Mejor objetivo & 390.0 & - & 390.0 & 390.0 \\
 & Cota dual & 390.0 & - & 390.0 & 390.0 \\
-& \# variables & 143 & - & 8 & - \\
+& \# variables & 143 & - & 10 & - \\
 & \# restricciones & 171 & - & 5 & - \\
-& Tiempo (s) & 0.45 & - & \textbf{0.04} & - \\
+& Tiempo (s) & 0.45 & - & \textbf{0.03} & - \\
 \hline
 \multirow{5}{*}{\texttt{test2}}
 & Mejor objetivo & 640.0 & - & 640.0 & 640.0 \\
 & Cota dual & 640.0 & - & 640.0 & 640.0 \\
-& \# variables & 244 & - & 21 & - \\
+& \# variables & 244 & - & 23 & - \\
 & \# restricciones & 284 & - & 8 & - \\
-& Tiempo (s) & 0.32 & - & \textbf{0.12} & - \\
+& Tiempo (s) & 0.32 & - & \textbf{0.07} & - \\
 \hline
 \multirow{5}{*}{\texttt{test3}}
 & Mejor objetivo & 1110.0 & - & 1110.0 & 1110.0 \\
 & Cota dual & 1110.0 & - & 1110.0 & 1110.0 \\
-& \# variables & 367 & - & 27 & - \\
+& \# variables & 367 & - & 38 & - \\
 & \# restricciones & 427 & - & 10 & - \\
-& Tiempo (s) & 0.28 & - & \textbf{0.24} & - \\
+& Tiempo (s) & 0.28 & - & \textbf{0.22} & - \\
 \hline
 \multirow{5}{*}{\texttt{test4}}
 & Mejor objetivo & 20.0 & - & 20.0 & 20.0 \\
-& Cota dual & 20.0 & - & 20.0 & 20.0 \\
-& \# variables & 244 & - & 12 & - \\
+& Cota dual & 20.0 & - & 25.0 & 20.0 \\
+& \# variables & 244 & - & 20 & - \\
 & \# restricciones & 284 & - & 6 & - \\
-& Tiempo (s) & 0.41 & - & \textbf{0.06} & - \\
+& Tiempo (s) & 0.41 & - & \textbf{0.15} & - \\
 \hline
 \end{tabular}
 \caption{Resultados comparativos de las tres estrategias. En negrita se destaca el mejor valor para cada métrica.}
@@ -507,8 +507,8 @@ Si la solución LP del nodo es fraccionaria, se ramifica con la primera regla ap
 
 \begin{itemize}
     \item La Estrategia 1 (Salud MILP compacto) resuelve correctamente todas las instancias a optimalidad
-    \item La Estrategia 3 (SaludChallenger, Branch \& Price) alcanza el mismo óptimo en las cuatro instancias y lo prueba en el nodo raíz del árbol: la relajación por rutas es tan ajustada que la generación de columnas ya entrega soluciones enteras, sin necesidad de ramificar
-    \item El maestro de la Estrategia 3 requiere órdenes de magnitud menos variables que el modelo compacto (por ejemplo, 27 columnas contra 367 variables en \texttt{test3}), lo que anticipa una mejor escalabilidad en instancias grandes
+    \item La Estrategia 3 (SaludChallenger, Branch \& Price) alcanza y prueba el óptimo en las cuatro instancias. En \texttt{test1}--\texttt{test3} la relajación por rutas ya es entera en el nodo raíz; en \texttt{test4} el LP raíz es fraccionario (cota 25.0 contra óptimo 20.0) y el algoritmo ramifica (5 nodos) hasta probar optimalidad
+    \item El maestro de la Estrategia 3 requiere órdenes de magnitud menos variables que el modelo compacto (por ejemplo, 38 columnas contra 367 variables en \texttt{test3}), lo que anticipa una mejor escalabilidad en instancias grandes
     \item Los tiempos de ejecución son muy bajos (< 1 segundo) para las instancias de prueba
     \item La validación sin LP (SaludTest) funciona correctamente, confirmando factibilidad de todas las soluciones
 \end{itemize}
