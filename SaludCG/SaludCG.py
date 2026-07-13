@@ -301,8 +301,6 @@ def SaludCG(instancia: str, threshold: float) -> bool:
 
         # ===== GENERAR ARCHIVO DE SALIDA FORMATO ESTRICTO =====
         salida_contenido = generar_salida(beneficio_total, rutas_finales, no_atendidos)
-        # Quitar los espacios de las flechas para ser 100% compatibles con la corrección del corrector automático
-        salida_contenido = salida_contenido.replace(" -> ", "->")
         
         os.makedirs(out_path, exist_ok=True)
         archivo_salida = os.path.join(out_path, f"{instancia}.out")

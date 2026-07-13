@@ -664,8 +664,6 @@ def SaludChallenger(instancia: str, threshold: float) -> bool:
             print(f"Ruta ({tipo_combi}): {camino}")
 
         salida_contenido = generar_salida(incumbente_val, rutas_finales, no_atendidos)
-        # Sin espacios en las flechas, igual que SaludCG, por compatibilidad con el corrector
-        salida_contenido = salida_contenido.replace(" -> ", "->")
 
         os.makedirs(out_path, exist_ok=True)
         archivo_salida = os.path.join(out_path, f"{instancia}.out")
@@ -677,7 +675,7 @@ def SaludChallenger(instancia: str, threshold: float) -> bool:
         return True
 
     except Exception as e:
-        print(f"\n✗ Error crítico en la ejecución de la estrategia: {e}")
+        print(f"\n[ERROR] Error crítico en la ejecución de la estrategia: {e}")
         import traceback
         traceback.print_exc()
         return False

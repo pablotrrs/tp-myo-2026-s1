@@ -63,14 +63,14 @@ def SaludTest(instancia: str, output_file: str = None,
         flota = leer_flota(archivo_flota)
         incomp = leer_incompatibilidades(archivo_incomp)
         
-        print(f"  ✓ {len(pacientes)} pacientes cargados")
-        print(f"  ✓ {len(flota)} tipos de combi")
+        print(f"  [OK] {len(pacientes)} pacientes cargados")
+        print(f"  [OK] {len(flota)} tipos de combi")
         
         # ===== LEER ARCHIVO DE SALIDA =====
         print("\n[2/6] Leyendo archivo de salida...")
         
         if not os.path.exists(output_file):
-            print(f"  ✗ Archivo no encontrado: {output_file}")
+            print(f"  [ERROR] Archivo no encontrado: {output_file}")
             return False
         
         with open(output_file, 'r') as f:
@@ -78,9 +78,9 @@ def SaludTest(instancia: str, output_file: str = None,
         
         beneficio_reportado, rutas, no_atendidos = parsear_salida(contenido)
         
-        print(f"  ✓ Beneficio reportado: {beneficio_reportado}")
-        print(f"  ✓ {len(rutas)} rutas")
-        print(f"  ✓ {len(no_atendidos)} pacientes no atendidos")
+        print(f"  [OK] Beneficio reportado: {beneficio_reportado}")
+        print(f"  [OK] {len(rutas)} rutas")
+        print(f"  [OK] {len(no_atendidos)} pacientes no atendidos")
         
         # ===== VALIDAR CADA RUTA =====
         print("\n[3/6] Validando rutas...")
@@ -90,26 +90,26 @@ def SaludTest(instancia: str, output_file: str = None,
             
             # Validar que exista el tipo de combi
             if tipo_combi not in flota:
-                print(f"    ✗ Tipo de combi desconocido: {tipo_combi}")
+                print(f"    [ERROR] Tipo de combi desconocido: {tipo_combi}")
                 return False
             
             combi_info = flota[tipo_combi]
             
             # V1: Comienza y termina en centro (nodo 0)
             if len(nodos) < 2 or nodos[0] != 0 or nodos[-1] != 0:
-                print(f"    ✗ Ruta no comienza o no termina en centro")
+                print(f"    [ERROR] Ruta no comienza o no termina en centro")
                 return False
-            print(f"    ✓ Comienza y termina en centro")
+            print(f"    [OK] Comienza y termina en centro")
             
             # V2: Capacidad respetada
             num_pacientes = len(nodos) - 2  # Sin contar el centro dos veces
             if num_pacientes > combi_info.cant_asientos:
-                print(f"    ✗ Excede capacidad: {num_pacientes} > {combi_info.cant_asientos}")
+                print(f"    [ERROR] Excede capacidad: {num_pacientes} > {combi_info.cant_asientos}")
                 return False
-            print(f"    ✓ Capacidad respetada: {num_pacientes}/{combi_info.cant_asientos}")
+            print(f"    [OK] Capacidad respetada: {num_pacientes}/{combi_info.cant_asientos}")
             
             # V3: Ventanas de tiempo y tiempos de viaje
-            print(f"    ✓ Validando ventanas de tiempo...")
+            print(f"    [INFO] Validando ventanas de tiempo...")
             
             tiempo_actual = 0
             nodos_en_ruta = nodos[1:-1]  # Excluir centros de inicio y fin
@@ -149,32 +149,32 @@ def SaludTest(instancia: str, output_file: str = None,
                         tiempo_actual = paciente_sig.ih_inicio
                     
                     if tiempo_actual > paciente_sig.ih_fin:
-                        print(f"      ✗ Paciente {nodo_siguiente_id} violado: "
+                        print(f"      [ERROR] Paciente {nodo_siguiente_id} violado: "
                               f"tiempo={tiempo_actual:.2f} > ih_fin={paciente_sig.ih_fin}")
                         return False
                     
-                    print(f"      ✓ P{nodo_siguiente_id}: tiempo={tiempo_actual:.2f} "
-                          f"∈ [{paciente_sig.ih_inicio}, {paciente_sig.ih_fin}]")
+                    print(f"      [OK] P{nodo_siguiente_id}: tiempo={tiempo_actual:.2f} "
+                          f"in [{paciente_sig.ih_inicio}, {paciente_sig.ih_fin}]")
             
             # V4: Sin categorías incompatibles
-            print(f"    ✓ Validando incompatibilidades...")
+            print(f"    [INFO] Validando incompatibilidades...")
             
             pacientes_en_ruta = [pacientes_dict[pid] for pid in nodos_en_ruta]
             
             for i, p1 in enumerate(pacientes_en_ruta):
                 for p2 in pacientes_en_ruta[i+1:]:
                     if (p1.categoria, p2.categoria) in incomp:
-                        print(f"      ✗ Incompatibilidad detectada: "
+                        print(f"      [ERROR] Incompatibilidad detectada: "
                               f"{p1.categoria} <-> {p2.categoria}")
                         return False
             
             if len(pacientes_en_ruta) > 1:
                 cats = [p.categoria for p in pacientes_en_ruta]
-                print(f"      ✓ Categorías compatibles: {cats}")
+                print(f"      [OK] Categorías compatibles: {cats}")
             
             # V5: Distancias calculadas correctamente
             # (ya se validó en ventanas de tiempo)
-            print(f"    ✓ Distancias calculadas correctamente")
+            print(f"    [OK] Distancias calculadas correctamente")
         
         # ===== VALIDAR PACIENTES NO ATENDIDOS =====
         print("\n[4/6] Validando pacientes no atendidos...")
@@ -187,12 +187,12 @@ def SaludTest(instancia: str, output_file: str = None,
         pacientes_no_atendidos_esperados = set(p.id for p in pacientes) - pacientes_atendidos
         
         if set(no_atendidos) != pacientes_no_atendidos_esperados:
-            print(f"  ✗ Lista de no atendidos incorrecta")
+            print(f"  [ERROR] Lista de no atendidos incorrecta")
             print(f"    Esperado: {sorted(pacientes_no_atendidos_esperados)}")
             print(f"    Reportado: {sorted(no_atendidos)}")
             return False
         
-        print(f"  ✓ Lista de no atendidos válida: {sorted(no_atendidos) if no_atendidos else 'vacía'}")
+        print(f"  [OK] Lista de no atendidos válida: {sorted(no_atendidos) if no_atendidos else 'vacía'}")
         
         # ===== VALIDAR BENEFICIO TOTAL =====
         print("\n[5/6] Validando beneficio total...")
@@ -212,14 +212,14 @@ def SaludTest(instancia: str, output_file: str = None,
         # Permitir pequeño error de precisión
         epsilon = 1e-6
         if abs(beneficio_reportado - beneficio_esperado) > epsilon:
-            print(f"  ✗ Beneficio incorrecto")
+            print(f"  [ERROR] Beneficio incorrecto")
             print(f"    Reportado: {beneficio_reportado}")
             print(f"    Esperado: {beneficio_esperado}")
             print(f"    Beneficio pacientes: {beneficio_pacientes}")
             print(f"    Costo combis: {costo_combis_usadas}")
             return False
         
-        print(f"  ✓ Beneficio válido: {beneficio_reportado:.2f}")
+        print(f"  [OK] Beneficio valido: {beneficio_reportado:.2f}")
         print(f"    Beneficio pacientes: {beneficio_pacientes:.2f}")
         print(f"    Costo combis: {costo_combis_usadas:.2f}")
         
@@ -230,13 +230,13 @@ def SaludTest(instancia: str, output_file: str = None,
         print(f"  Pacientes no atendidos: {len(no_atendidos)}")
         print(f"  Beneficio neto: {beneficio_reportado:.2f}")
         
-        print(f"\n✓ SOLUCIÓN VÁLIDA")
+        print(f"\n[OK] SOLUCION VALIDA")
         print(f"{'='*70}\n")
         
         return True
         
     except Exception as e:
-        print(f"\n✗ Error durante validación: {e}")
+        print(f"\n[ERROR] Error durante validacion: {e}")
         import traceback
         traceback.print_exc()
         return False
