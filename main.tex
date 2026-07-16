@@ -14,6 +14,24 @@
 \usepackage{booktabs}
 \usepackage{array}
 \usepackage{multirow}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+% Pseudocódigo en castellano
+\floatname{algorithm}{Algoritmo}
+\algrenewcommand\algorithmicrequire{\textbf{Entrada:}}
+\algrenewcommand\algorithmicensure{\textbf{Salida:}}
+\algrenewcommand\algorithmicwhile{\textbf{mientras}}
+\algrenewcommand\algorithmicdo{\textbf{hacer}}
+\algrenewcommand\algorithmicend{\textbf{fin}}
+\algrenewcommand\algorithmicif{\textbf{si}}
+\algrenewcommand\algorithmicthen{\textbf{entonces}}
+\algrenewcommand\algorithmicelse{\textbf{si no}}
+\algrenewcommand\algorithmicfor{\textbf{para}}
+\algrenewcommand\algorithmicforall{\textbf{para cada}}
+\algrenewcommand\algorithmicloop{\textbf{repetir}}
+\algrenewcommand\algorithmicreturn{\textbf{devolver}}
+\algrenewcommand\algorithmicfunction{\textbf{función}}
 
 \newtheorem{theorem}{Theorem}
 \newtheorem{lemma}{Lemma}
@@ -358,44 +376,68 @@ El proceso itera hasta convergencia LP, permitiendo manejar instancias más gran
 
 \subsection{Descripción de la Estrategia}
 
-La estrategia SaludChallenger integra la Generación de Columnas de la Estrategia 2 dentro de un esquema de \textbf{Branch \& Price}: un árbol de branch \& bound en el que la relajación lineal de \emph{cada nodo} se resuelve mediante generación de columnas. A diferencia de SaludCG, que al terminar la fase de generación resuelve el maestro entero sobre el pool de columnas disponible (una heurística que no garantiza optimalidad entera), SaludChallenger ramifica sobre las soluciones fraccionarias y explora el árbol hasta \textbf{probar optimalidad entera} (o agotar el tiempo disponible).
-
-Las mejoras implementadas son:
+La estrategia \textbf{SaludChallenger} convierte la generación de columnas de la Estrategia 2 en un método \emph{exacto} mediante \textbf{Branch \& Price (B\&P)}, la técnica estándar de la literatura para problemas de ruteo resueltos por generación de columnas. La motivación surge de dos limitaciones de SaludCG:
 
 \begin{itemize}
-    \item \textbf{Branch \& Price}: generación de columnas en cada nodo del árbol, con ramificación de \emph{Ryan-Foster} sobre pares de pacientes, complementada con ramificación sobre la atención de un paciente y sobre la cantidad de vehículos usados por tipo de combi. La exploración es \emph{best-first} (se procesa primero el nodo con mejor cota) y los nodos cuya cota LP no supera al incumbente se podan.
-    \item \textbf{Inicialización eficiente}: el pool inicial se construye con todas las rutas \emph{singleton} factibles (ida y vuelta a cada paciente alcanzable, por cada tipo de combi) más rutas multi-paciente generadas por una heurística golosa que ordena por beneficio y respeta ventanas de tiempo, capacidad e incompatibilidades.
-    \item \textbf{Eliminación de columnas}: las rutas que acumulan $K = 25$ resoluciones consecutivas del maestro con valor cero se marcan como eliminadas y dejan de participar. Como el pricing puede regenerarlas si vuelven a ser necesarias, esta limpieza no compromete la exactitud del método.
-    \item \textbf{Warm-starting}: el pool de columnas es global y se comparte entre todos los nodos del árbol (cada nodo filtra las columnas compatibles con sus decisiones de ramificación), y el incumbente inicial se obtiene resolviendo el maestro entero sobre las columnas heurísticas antes de comenzar la exploración, lo que habilita podas tempranas.
+    \item \textbf{Su etapa final es heurística.} Cuando SaludCG deja de generar columnas, resuelve el maestro \emph{entero} usando únicamente las rutas de su pool. Nada garantiza que la solución entera óptima se forme con esas rutas: puede necesitar columnas que la fase LP nunca tuvo motivo de generar.
+    \item \textbf{No tiene mecanismo para cerrar el gap.} La cota dual de SaludCG corresponde a la relajación lineal del nodo raíz; si esa relajación es fraccionaria, el método no dispone de ninguna herramienta para acercar la cota al valor de la mejor solución entera.
+\end{itemize}
+
+Branch \& Price ataca ambos problemas integrando la generación de columnas dentro de un árbol de \emph{branch \& bound}: la relajación lineal de \textbf{cada nodo} del árbol se resuelve por generación de columnas (con lo cual la cota de cada nodo es válida aunque el maestro tenga pocas columnas), y cuando la solución de un nodo es fraccionaria se \textbf{ramifica} usando reglas elegidas especialmente para que las decisiones puedan imponerse también dentro del subproblema de pricing. Con tiempo suficiente, el método encuentra el óptimo entero y además \emph{certifica} su optimalidad.
+
+\subsubsection*{Vista general del método}
+
+El algoritmo se organiza en seis pasos; los pseudocódigos correspondientes están en la Sección~\ref{sec:challenger_pseudo}.
+
+\begin{enumerate}
+    \item \textbf{Inicialización del pool de columnas} (Algoritmo~\ref{alg:init}): se generan todas las rutas \emph{singleton} factibles (ida y vuelta a cada paciente alcanzable, por cada tipo de combi) más rutas multi-paciente construidas por una heurística golosa que respeta ventanas de tiempo, capacidad e incompatibilidades.
+    \item \textbf{Warm-start del incumbente}: antes de explorar el árbol se resuelve el maestro entero sobre el pool inicial. Su valor (o $Z = 0$, ``no operar'', que siempre es factible) es el primer incumbente y habilita podas desde el primer nodo.
+    \item \textbf{Exploración best-first}: los nodos abiertos se guardan en una cola de prioridad ordenada por la cota LP de su padre; siempre se procesa primero el nodo más prometedor.
+    \item \textbf{Generación de columnas en el nodo} (Algoritmo~\ref{alg:cgnodo}): se resuelve la relajación lineal del maestro restringido a las columnas compatibles con las decisiones del nodo, iterando maestro $\leftrightarrow$ pricing hasta que ningún tipo de combi aporte columnas de ganancia reducida positiva. Durante estas iteraciones se \emph{eliminan} las columnas que llevan $K$ resoluciones consecutivas sin usarse.
+    \item \textbf{Poda o ramificación}: si la cota LP del nodo no supera al incumbente, el nodo se descarta; si la solución es entera, se actualiza el incumbente; si es fraccionaria, se crean dos hijos con la primera regla aplicable (Ryan--Foster sobre pares de pacientes, atención de un paciente, o cantidad de vehículos por tipo).
+    \item \textbf{Refuerzo final}: al agotarse el árbol o el tiempo, se resuelve una última vez el maestro entero sobre \emph{todo} el pool acumulado, que puede mejorar el incumbente combinando rutas generadas en distintos nodos.
+\end{enumerate}
+
+\subsubsection*{Relación con las mejoras sugeridas en el enunciado}
+
+\begin{itemize}
+    \item \emph{Generar las columnas iniciales de manera más eficiente}: singletons factibles más heurística golosa (Algoritmo~\ref{alg:init}); el pool inicial ya contiene rutas de buena calidad, y el warm-start las convierte de inmediato en una solución factible.
+    \item \emph{Eliminar las columnas no usadas en las últimas iteraciones}: contador $\mathit{sin\_uso}$ por columna con umbral $K = 25$. Las columnas de la mejor solución conocida están protegidas y, si el pricing vuelve a generar una columna eliminada, ésta se reactiva; así la limpieza no invalida las cotas (detalles en la Sección~\ref{sec:challenger_impl}).
+    \item \emph{Mejoras basadas en la literatura}: el esquema completo de Branch \& Price con ramificación de Ryan--Foster.
 \end{itemize}
 
 \textbf{Ventajas:}
 \begin{itemize}
-    \item Garantiza optimalidad entera (a diferencia de la heurística final de SaludCG)
-    \item Cotas duales válidas en todo momento, lo que permite medir el gap de optimalidad
-    \item El maestro trabaja con pocas variables (solo las rutas generadas)
+    \item Método exacto: si el árbol se agota dentro del umbral, la solución queda \emph{certificada} como óptima (a diferencia de la etapa final heurística de SaludCG)
+    \item Cotas duales válidas en todo momento, lo que permite reportar el gap de optimalidad al detenerse por tiempo
+    \item El maestro de cada nodo trabaja con pocas variables (solo las rutas generadas y compatibles con el nodo)
 \end{itemize}
 
 \textbf{Limitaciones:}
 \begin{itemize}
-    \item El subproblema de pricing sigue siendo un MILP de ruteo (NP-difícil)
-    \item El árbol de ramificación puede crecer en instancias con mucha simetría
+    \item El subproblema de pricing sigue siendo un MILP de ruteo (NP-difícil); es el cuello de botella en instancias grandes
+    \item El árbol puede crecer en instancias con mucha simetría (columnas intercambiables entre combis idénticas)
 \end{itemize}
 
 \subsection{Modelo Matemático}
 
-\subsubsection{Problema Maestro}
+La estrategia utiliza dos modelos que dialogan entre sí: el \textbf{problema maestro}, que selecciona rutas, y el \textbf{subproblema de pricing}, que construye rutas nuevas. Se describen a continuación, junto con las reglas de ramificación que los conectan con el árbol de búsqueda.
 
-Sea $\Omega_t$ el conjunto de rutas factibles para el tipo de combi $t \in T$ (rutas que parten y regresan al centro, respetan capacidad, ventanas de tiempo e incompatibilidades) y $\Omega = \bigcup_{t \in T} \Omega_t$. Para cada ruta $r \in \Omega_t$ se define:
+\subsubsection{Problema Maestro (formulación por rutas)}
 
+\paragraph{i. Problema que resuelve.} Decidir \emph{qué rutas ejecutar} para maximizar el beneficio neto, suponiendo conocido el conjunto de todas las rutas factibles. Una \emph{ruta} es el recorrido de una combi que parte del centro, recoge un subconjunto de pacientes en cierto orden y regresa al centro, respetando capacidad, ventanas de tiempo e incompatibilidades. Esta formulación traslada toda la complejidad del ruteo a la definición de las columnas: al maestro solo le queda combinarlas.
+
+\paragraph{ii. Conjuntos, parámetros y variables.}
 \begin{itemize}
-    \item $a_{pr} \in \{0,1\}$: igual a 1 si la ruta $r$ atiende al paciente $p$
-    \item $c_r = \sum_{p \in P} a_{pr} \cdot \text{beneficio}[p] - \text{costo}[t]$: rentabilidad neta de la ruta
+    \item $P$: pacientes; $T$: tipos de combi
+    \item $\Omega_t$: conjunto (de tamaño exponencial) de rutas factibles para el tipo $t$; $\Omega = \bigcup_{t \in T} \Omega_t$
+    \item $a_{pr} \in \{0,1\}$: parámetro igual a 1 si la ruta $r$ atiende al paciente $p$
+    \item $c_r = \sum_{p \in P} a_{pr} \cdot \text{beneficio}[p] - \text{costo}[t(r)]$: rentabilidad neta de la ruta $r$ (el beneficio de sus pacientes menos el costo operativo de su combi)
     \item $\text{disp}[t]$: cantidad de combis disponibles del tipo $t$
+    \item Variable de decisión: $y_r \in \{0,1\}$, igual a 1 si la ruta $r$ se ejecuta
 \end{itemize}
 
-Con la variable de decisión $y_r \in \{0,1\}$ (la ruta $r$ se ejecuta o no):
-
+\paragraph{iii. Formulación.}
 \begin{align}
   \max & \quad Z = \sum_{r \in \Omega} c_r \cdot y_r \label{eq:bp_obj}\\
   \text{s.a.} & \quad \sum_{r \in \Omega} a_{pr} \cdot y_r \leq 1 \quad \forall p \in P \label{eq:bp_cover}\\
@@ -403,27 +445,188 @@ Con la variable de decisión $y_r \in \{0,1\}$ (la ruta $r$ se ejecuta o no):
   & \quad y_r \in \{0, 1\} \quad \forall r \in \Omega \label{eq:bp_bin}
 \end{align}
 
-La ecuación \eqref{eq:bp_cover} asegura que cada paciente sea atendido a lo sumo una vez y la ecuación \eqref{eq:bp_fleet} que no se usen más vehículos de los disponibles por tipo. Como $|\Omega|$ es exponencial, en cada nodo del árbol se resuelve la relajación lineal ($y_r \geq 0$) sobre un subconjunto de columnas, agregando nuevas rutas mediante el subproblema de pricing.
+\paragraph{iv. Explicación.} El objetivo \eqref{eq:bp_obj} suma la rentabilidad neta de las rutas elegidas; coincide con el beneficio neto del enunciado porque cada ruta ya descuenta el costo de su combi. La restricción \eqref{eq:bp_cover} impide que un paciente sea atendido por más de una ruta (atenderlo o no queda implícito: la desigualdad permite dejarlo sin cubrir), y \eqref{eq:bp_fleet} que se usen más vehículos de un tipo que los disponibles. Como $|\Omega|$ es exponencial, el modelo completo nunca se materializa: en cada nodo del árbol se resuelve la \emph{relajación lineal} ($y_r \geq 0$) sobre el subconjunto de columnas generado hasta el momento ---el \emph{maestro restringido}--- y el pricing agrega las que falten.
+
+\paragraph{El maestro restringido dentro de un nodo.} En un nodo del árbol, el LP se ajusta a las decisiones de ramificación vigentes:
+\begin{itemize}
+    \item Participan solo las columnas del pool \emph{compatibles} con el nodo (por ejemplo, en una rama ``$p$ y $q$ separados'' se excluyen las rutas que los contienen a ambos).
+    \item Si la ramificación exige atender al paciente $p$, la restricción \eqref{eq:bp_cover} pasa a igualdad. Para que el LP nunca se vuelva infactible (y sus duales queden bien definidos) se agrega una variable artificial $s_p \in [0,1]$ penalizada con un coeficiente $\rho$ en el objetivo: $\sum_r a_{pr}\, y_r + s_p = 1$. Con $\rho$ mayor que cualquier beneficio alcanzable, $s_p > 0$ solo ocurre si las decisiones del nodo son incompatibles entre sí; en ese caso el nodo se poda.
+    \item Las ramificaciones sobre la flota reemplazan \eqref{eq:bp_fleet} por cotas $lb_t \leq \sum_{r \in \Omega_t} y_r \leq ub_t$ (la cota inferior también lleva su variable artificial penalizada).
+\end{itemize}
 
 \subsubsection{Subproblema de Pricing}
 
-Sean $\pi_p$ los duales de \eqref{eq:bp_cover} y $\mu_t$ los duales de \eqref{eq:bp_fleet}. Para cada tipo $t$ se busca la ruta factible que maximiza la ganancia reducida, resolviendo un MILP de ruteo de un solo vehículo (variables $x_{ij}$, $z_p$, $T_i$ análogas a las del modelo compacto, más una variable de orden $u_p$ tipo MTZ que elimina subtours incluso entre pacientes a distancia cero):
+\paragraph{i. Problema que resuelve.} Dados los precios sombra del maestro restringido, encontrar ---para cada tipo de combi $t$--- la ruta factible de \emph{máxima ganancia reducida}: la columna que más mejoraría el LP actual si se agregara. Es un problema de ruteo de un solo vehículo con selección de pacientes.
 
+Sean $\pi_p$ los duales de \eqref{eq:bp_cover} y $\mu_t$ los de \eqref{eq:bp_fleet} (o de sus cotas en el nodo). El costo reducido de una ruta $r \in \Omega_t$ es
+\[
+\bar{c}_r \;=\; c_r - \sum_{p \in P} a_{pr}\, \pi_p - \mu_t
+\;=\; \sum_{p \in P} a_{pr}\, (\text{beneficio}[p] - \pi_p) \;-\; \text{costo}[t] - \mu_t,
+\]
+por lo que basta maximizar la suma $\sum_p (\text{beneficio}[p] - \pi_p)\, z_p$ sobre las rutas factibles y restar al final las constantes $\text{costo}[t] + \mu_t$.
+
+\paragraph{ii. Conjuntos, parámetros y variables.} Para un tipo $t$ fijo, con $V = \{0\} \cup P$ los nodos, $n = |P|$, $d_{ij}$ las distancias, $\text{asientos}[t]$ la capacidad y $M$ una constante grande:
+\begin{itemize}
+    \item $x_{ij} \in \{0,1\}$: la combi viaja directamente del nodo $i$ al nodo $j$
+    \item $z_p \in \{0,1\}$: la ruta atiende al paciente $p$
+    \item $T_i \geq 0$: tiempo de llegada al nodo $i$
+    \item $u_p \in [0, n]$: posición del paciente $p$ en el recorrido (orden tipo MTZ)
+\end{itemize}
+
+\paragraph{iii. Formulación.}
 \begin{align}
-  \max & \quad \sum_{p \in P} (\text{beneficio}[p] - \pi_p) \cdot z_p \label{eq:bp_pricing}
+  \max \quad & \sum_{p \in P} (\text{beneficio}[p] - \pi_p) \cdot z_p \label{eq:bp_pricing}\\
+  \text{s.a.} \quad
+  & \sum_{p \in P} z_p \leq \text{asientos}[t] \label{eq:pr_cap}\\
+  & \sum_{i \in V,\, i \neq p} x_{ip} = z_p, \qquad \sum_{j \in V,\, j \neq p} x_{pj} = z_p \quad \forall p \in P \label{eq:pr_deg}\\
+  & \sum_{j \in P} x_{0j} \leq 1, \qquad \sum_{i \in P} x_{i0} = \sum_{j \in P} x_{0j} \label{eq:pr_depot}\\
+  & z_p \leq \sum_{j \in P} x_{0j} \quad \forall p \in P \label{eq:pr_ghost}\\
+  & T_j \geq T_i + d_{ij} - M \cdot (1 - x_{ij}) \quad \forall i \in V,\ j \in P,\ i \neq j \label{eq:pr_time}\\
+  & u_j \geq u_i + 1 - n \cdot (1 - x_{ij}) \quad \forall i, j \in P,\ i \neq j \label{eq:pr_mtz}\\
+  & ih_{\text{inicio}}[p] \cdot z_p \;\leq\; T_p \;\leq\; ih_{\text{fin}}[p] \cdot z_p + M \cdot (1 - z_p) \quad \forall p \in P \label{eq:pr_tw}\\
+  & z_p + z_q \leq 1 \quad \forall (p,q):\ (\text{categoria}[p], \text{categoria}[q]) \in \mathcal{I} \label{eq:pr_inc}
 \end{align}
 
-sujeto a las restricciones de flujo, capacidad, ventanas de tiempo e incompatibilidades para un vehículo del tipo $t$. Si el óptimo $\theta_t^*$ cumple $\theta_t^* - \text{costo}[t] - \mu_t > \varepsilon$, la ruta encontrada se agrega al pool como nueva columna. Cuando ningún tipo aporta columnas con ganancia reducida positiva, la relajación del nodo es óptima.
+y, según las decisiones del nodo (con $J$ los pares ``juntos'', $S$ los pares ``separados'' y $F$ los pacientes prohibidos):
+\begin{align}
+  z_a = z_b \quad \forall (a,b) \in J, \qquad
+  z_a + z_b \leq 1 \quad \forall (a,b) \in S, \qquad
+  z_p = 0 \quad \forall p \in F \label{eq:pr_branch}
+\end{align}
+
+\paragraph{iv. Explicación.} El objetivo \eqref{eq:bp_pricing} maximiza la parte variable de la ganancia reducida: cada paciente ``vale'' su beneficio menos el precio sombra $\pi_p$ que el maestro ya paga por cubrirlo. \eqref{eq:pr_cap} limita los asientos. \eqref{eq:pr_deg} vincula flujo y atención: la combi entra y sale exactamente una vez de cada paciente atendido y no pasa por los no atendidos. \eqref{eq:pr_depot} permite a lo sumo un viaje, que si existe sale del centro y regresa a él; \eqref{eq:pr_ghost} impide ``rutas fantasma'' (atender pacientes sin salir del centro). \eqref{eq:pr_time} propaga el tiempo a lo largo de los arcos usados; al ser una desigualdad, la combi puede \emph{esperar} en la puerta hasta $ih_{\text{inicio}}$, tal como exige el enunciado. \eqref{eq:pr_tw} obliga a recoger a cada paciente atendido dentro de su ventana. \eqref{eq:pr_mtz} es un orden tipo Miller--Tucker--Zemlin entre pacientes: elimina los subtours que \eqref{eq:pr_time} no alcanza a prohibir cuando hay pacientes a distancia $0$ (dos domicilios en la misma coordenada permitirían un ciclo de duración nula). \eqref{eq:pr_inc} replica las incompatibilidades de bioseguridad y \eqref{eq:pr_branch} impone las decisiones de ramificación del nodo. Los pacientes \emph{requeridos} por la ramificación no aparecen aquí: exigir cobertura es una condición global sobre el conjunto de rutas y se impone en el maestro.
+
+\paragraph{Criterio de incorporación.} Si $\theta_t^*$ es el óptimo de \eqref{eq:bp_pricing}, la mejor ruta del tipo $t$ tiene ganancia reducida $\theta_t^* - \text{costo}[t] - \mu_t$. Si supera la tolerancia $\varepsilon = 10^{-4}$, la ruta se agrega al pool. Cuando ningún tipo aporta columnas, el LP del nodo es óptimo y su valor es una cota dual válida para todo el subárbol.
 
 \subsubsection{Reglas de Ramificación}
 
-Si la solución LP del nodo es fraccionaria, se ramifica con la primera regla aplicable:
+\paragraph{Por qué no se ramifica sobre $y_r$.} La ramificación clásica sobre una variable ($y_r = 0$ vs.\ $y_r = 1$) es incompatible con la generación de columnas: en la rama $y_r = 0$ el pricing tendería a regenerar exactamente la ruta prohibida (sigue siendo la más atractiva), y excluir \emph{una ruta puntual} no puede expresarse como restricción lineal del pricing sin romper su estructura. Además el árbol queda desbalanceado: $y_r = 1$ fija mucho y $y_r = 0$ casi nada. Por eso se ramifica sobre cantidades agregadas de la solución, que sí se traducen en restricciones lineales simples del pricing y en filtros sobre el pool.
+
+Si la solución LP del nodo es fraccionaria, se aplica la primera regla utilizable:
 
 \begin{enumerate}
-    \item \textbf{Ryan-Foster (pares de pacientes)}: se elige el par $(p,q)$ cuyo valor $\sum_{r:\, p,q \in r} y_r$ es más fraccionario. En la rama \emph{juntos} se exige $z_p = z_q$ en el pricing (y se descartan las columnas que contienen exactamente uno de los dos); en la rama \emph{separados} se exige $z_p + z_q \leq 1$ (y se descartan las columnas que contienen a ambos).
-    \item \textbf{Atención de un paciente}: si $\sum_{r} a_{pr} \cdot y_r$ es fraccionario, en una rama se fuerza la atención de $p$ (la restricción \eqref{eq:bp_cover} pasa a igualdad, manteniendo la factibilidad del LP con una variable artificial penalizada) y en la otra se prohíbe ($z_p = 0$ en el pricing).
-    \item \textbf{Vehículos por tipo}: si la cantidad de vehículos usados de un tipo $t$ toma un valor fraccionario $v$, se ramifica en $\sum_{r \in \Omega_t} y_r \leq \floor{v}$ y $\sum_{r \in \Omega_t} y_r \geq \ceil{v}$.
+    \item \textbf{Ryan--Foster (pares de pacientes)}: se calcula $w_{pq} = \sum_{r:\, p,q \in r} y_r$ (cuánto ``viajan juntos'' $p$ y $q$) y se elige el par de valor más fraccionario (más cercano a $0{,}5$). En la rama \emph{juntos} se exige $z_p = z_q$ en el pricing y se descartan del maestro las columnas que contienen exactamente uno de los dos; en la rama \emph{separados} se exige $z_p + z_q \leq 1$ y se descartan las columnas que los contienen a ambos. Ambas ramas recortan el espacio de forma equilibrada.
+    \item \textbf{Atención de un paciente}: si la cobertura $\alpha_p = \sum_{r} a_{pr} \cdot y_r$ es fraccionaria, en una rama se fuerza la atención de $p$ (la restricción \eqref{eq:bp_cover} pasa a igualdad, con su variable artificial penalizada) y en la otra se prohíbe ($z_p = 0$ en el pricing y filtrado de las columnas que lo contienen).
+    \item \textbf{Vehículos por tipo}: si la cantidad de vehículos usados de un tipo, $v_t = \sum_{r \in \Omega_t} y_r$, es fraccionaria, se ramifica en $v_t \leq \floor{v_t}$ y $v_t \geq \ceil{v_t}$.
 \end{enumerate}
+
+Queda un caso borde: columnas \emph{equivalentes} (mismo tipo de combi y mismo conjunto de pacientes, en distinto orden) pueden repartirse valor fraccionario sin que ninguna regla aplique, porque todas las cantidades agregadas resultan enteras. Como esas columnas tienen idéntica rentabilidad, basta elegir un representante por grupo: se obtiene una solución entera del mismo valor que el LP y el nodo se cierra.
+
+\subsection{Pseudocódigo y Detalles de Implementación}
+\label{sec:challenger_pseudo}
+
+Los Algoritmos \ref{alg:bp}--\ref{alg:init} presentan el método en tres niveles: el esquema principal de Branch \& Price, la generación de columnas dentro de un nodo (que incluye la eliminación de columnas) y la construcción del pool inicial.
+
+\begin{algorithm}[H]
+\caption{\textsc{SaludChallenger} --- esquema principal de Branch \& Price}
+\label{alg:bp}
+\begin{algorithmic}[1]
+\Require instancia (pacientes $P$, centro, flota, incompatibilidades), umbral de tiempo
+\Ensure archivo de salida con la mejor solución entera hallada
+\State leer la instancia y calcular la matriz de distancias; $\mathit{fin} \gets \text{ahora} + \text{umbral}$
+\State $\mathit{pool} \gets \Call{ColumnasIniciales}{ }$ \Comment{Algoritmo~\ref{alg:init}}
+\State $(Z^*, R^*) \gets \Call{MaestroEntero}{\mathit{pool}}$ \Comment{warm-start; ``no operar'' garantiza $Z^* \geq 0$}
+\State $\mathit{abiertos} \gets \{\text{nodo raíz, sin decisiones de ramificación}\}$
+\While{$\mathit{abiertos} \neq \emptyset$ \textbf{y} resta tiempo (descontada la reserva final) \textbf{y} nodos $< \text{MAX}$}
+    \State $n \gets$ nodo de mejor cota heredada de $\mathit{abiertos}$ \Comment{best-first}
+    \If{$\text{cota}(n) \leq Z^*$} \textbf{continuar} \Comment{poda por cota heredada}
+    \EndIf
+    \State $(\mathit{obj},\, y,\, \mathit{artif},\, \text{convergió}) \gets \Call{CGenNodo}{n, \mathit{pool}, \mathit{fin}}$ \Comment{Algoritmo~\ref{alg:cgnodo}}
+    \If{no $\text{convergió}$} \textbf{salir del ciclo} \Comment{se agotó el tiempo}
+    \EndIf
+    \If{LP infactible \textbf{o} $\mathit{artif}$ \textbf{o} $\mathit{obj} \leq Z^*$} \textbf{continuar} \Comment{poda}
+    \EndIf
+    \If{$y$ es entera} actualizar $(Z^*, R^*)$ y \textbf{continuar}
+    \EndIf
+    \State $d \gets$ primera regla aplicable: Ryan--Foster $\to$ atención de paciente $\to$ flota por tipo
+    \If{no hay regla aplicable} \Comment{columnas equivalentes}
+        \State redondear por grupos; actualizar $(Z^*, R^*)$ si mejora; \textbf{continuar}
+    \EndIf
+    \State crear los dos hijos de $n$ según $d$, con cota heredada $\mathit{obj}$, y agregarlos a $\mathit{abiertos}$
+\EndWhile
+\If{$\mathit{abiertos} = \emptyset$ y no se cortó por tiempo ni por nodos} marcar \emph{óptimo certificado}
+\EndIf
+\State $(Z_{ip}, R_{ip}) \gets \Call{MaestroEntero}{\mathit{pool}}$ con el tiempo restante \Comment{refuerzo final}
+\If{$Z_{ip} > Z^*$} $(Z^*, R^*) \gets (Z_{ip}, R_{ip})$
+\EndIf
+\State escribir $Z^*$, el itinerario de cada ruta de $R^*$ y los pacientes no atendidos
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{\textsc{CGenNodo} --- generación de columnas en un nodo, con eliminación de columnas}
+\label{alg:cgnodo}
+\begin{algorithmic}[1]
+\Require nodo $n$, $\mathit{pool}$ global de columnas, $\mathit{fin}$ (instante límite)
+\Ensure cota LP del nodo, solución $y$, uso de artificiales, indicador de convergencia
+\State construir el pricing de cada tipo $t$ con las restricciones \eqref{eq:pr_branch} de $n$ \Comment{se reutiliza en todas las iteraciones}
+\Loop
+    \If{se alcanzó $\mathit{fin}$} \Return el último LP resuelto, con $\text{convergió} = \text{falso}$
+    \EndIf
+    \State $\mathit{activas} \gets \{r \in \mathit{pool} : r\ \text{no eliminada y compatible con}\ n\}$
+    \State resolver el LP maestro restringido sobre $\mathit{activas}$ $\Rightarrow$ $\mathit{obj}$, $y$, duales $(\pi, \mu)$
+    \ForAll{$r \in \mathit{activas}$} \Comment{eliminación de columnas sin uso}
+        \If{$y_r > 0$} $\mathit{sin\_uso}_r \gets 0$
+        \Else{} $\mathit{sin\_uso}_r \gets \mathit{sin\_uso}_r + 1$
+        \EndIf
+        \If{$\mathit{sin\_uso}_r \geq K$ \textbf{y} $r$ no pertenece al incumbente} marcar $r$ como eliminada
+        \EndIf
+    \EndFor
+    \State $\mathit{nuevas} \gets 0$
+    \ForAll{tipo de combi $t$}
+        \State resolver el pricing de $t$ con $(\pi, \mu_t)$ $\Rightarrow$ mejor ruta $r^*$ y ganancia reducida $\bar{c}^*$
+        \If{$\bar{c}^* > \varepsilon$} agregar $r^*$ al pool (si ya existía eliminada, \emph{revivirla}); $\mathit{nuevas} \gets \mathit{nuevas} + 1$
+        \EndIf
+    \EndFor
+    \If{$\mathit{nuevas} = 0$} \Return $(\mathit{obj},\, y,\, \mathit{artif},\, \text{verdadero})$ \Comment{el LP del nodo es óptimo}
+    \EndIf
+\EndLoop
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{\textsc{ColumnasIniciales} --- singletons factibles $+$ heurística golosa}
+\label{alg:init}
+\begin{algorithmic}[1]
+\Require pacientes $P$, centro, flota, distancias $d$, incompatibilidades
+\Ensure pool inicial de columnas
+\State $p$ es \emph{alcanzable} $\iff \max(d_{0p},\, ih_{\text{inicio}}[p]) \leq ih_{\text{fin}}[p]$ \Comment{saliendo en $t = 0$ se llega a tiempo}
+\ForAll{tipo $t$ y paciente alcanzable $p$}
+    \State agregar la ruta \emph{singleton} $[0 \to p \to 0]$ del tipo $t$
+\EndFor
+\ForAll{tipo de combi $t$} \Comment{rutas multi-paciente golosas}
+    \State $\mathit{pend} \gets$ pacientes alcanzables, ordenados por beneficio decreciente
+    \While{$\mathit{pend} \neq \emptyset$}
+        \State $\mathit{ruta} \gets [\ ]$; $\mathit{pos} \gets$ centro; $\tau \gets 0$
+        \While{$|\mathit{ruta}| < \text{asientos}[t]$}
+            \State $c \gets$ el paciente de $\mathit{pend}$ compatible con $\mathit{ruta}$ y con ventana cumplible llegando en $\max(\tau + d_{\mathit{pos},p},\ ih_{\text{inicio}}[p])$ que maximiza $\text{beneficio}[p] - d_{\mathit{pos},p}$
+            \If{no existe tal $c$} \textbf{salir del ciclo interno}
+            \EndIf
+            \State agregar $c$ a $\mathit{ruta}$; $\tau \gets \max(\tau + d_{\mathit{pos},c},\ ih_{\text{inicio}}[c])$; $\mathit{pos} \gets c$
+        \EndWhile
+        \If{$\mathit{ruta} = [\ ]$} \textbf{salir del ciclo} \Comment{ningún paciente pudo iniciar ruta}
+        \EndIf
+        \If{$|\mathit{ruta}| \geq 2$} agregar la columna $[0 \to \mathit{ruta} \to 0]$ del tipo $t$ \Comment{los singletons ya están}
+        \EndIf
+        \State quitar los pacientes de $\mathit{ruta}$ de $\mathit{pend}$
+    \EndWhile
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Detalles de implementación}
+\label{sec:challenger_impl}
+
+\begin{itemize}
+    \item \textbf{Pool global y deduplicación.} Las columnas viven en un único pool compartido por todos los nodos del árbol: una ruta generada en una rama puede reutilizarse en otra. Cada columna se identifica con la clave (tipo de combi, camino) para no insertar duplicados, y en cada nodo el maestro solo ve las columnas \emph{compatibles} con sus decisiones de ramificación.
+    \item \textbf{Eliminación de columnas ($K = 25$).} Cada columna lleva un contador de resoluciones consecutivas del maestro en las que valió $y_r = 0$; al llegar a $K$ se marca como eliminada y deja de entrar en los maestros siguientes. Dos salvaguardas mantienen la validez de las cotas: las columnas de la mejor solución entera conocida están \emph{protegidas} (nunca se eliminan) y, si el pricing vuelve a generar una columna eliminada, ésta se \emph{reactiva} en lugar de descartarse, de modo que nunca se declara la convergencia de un LP con columnas atractivas afuera. Se eligió $K = 25$, más conservador que el valor 5 sugerido en el enunciado: mantener columnas de más solo agranda un LP que ya es chico, mientras que eliminar de más obliga al pricing (un MILP costoso) a regenerarlas.
+    \item \textbf{Expiración segura del umbral.} Se fija un instante límite global al inicio, y toda llamada a SCIP (maestros y pricings) recibe \texttt{limits/time} acotado por el tiempo restante; el pricing se limita además a 10 segundos por llamada. Antes de explorar se reserva una ventana final de $\min(10,\ \max(3,\ 0{,}15 \cdot \text{umbral}))$ segundos para el maestro entero de refuerzo. Si el tiempo se agota en medio de un nodo, se devuelve el último LP resuelto (marcado como no convergido) y se reporta el incumbente vigente.
+    \item \textbf{Prioridad de una solución factible.} La combinación de warm-start y reserva final garantiza que la función siempre escriba una solución factible antes de agotar el umbral: aun con umbrales muy cortos existe al menos el incumbente del warm-start y, en el peor caso, la solución trivial ``no operar'' ($Z = 0$).
+    \item \textbf{Obtención de duales en SCIP.} En el maestro LP se desactivan presolve, heurísticas y propagación: si SCIP transforma o reduce el problema, los duales de las restricciones originales se pierden o quedan corruptos. Además, en problemas de maximización SCIP expone los duales de su problema interno de minimización, por lo que deben \emph{negarse} para recuperar los duales verdaderos. Los duales de las cotas superior e inferior de flota de un mismo tipo se suman para formar $\mu_t$.
+    \item \textbf{Variables artificiales penalizadas.} La penalización se fija en $\rho = \sum_p |\text{beneficio}[p]| + \sum_t \text{costo}[t] + 1000$, estrictamente mayor que cualquier mejora posible del objetivo: una artificial solo toma valor positivo si las decisiones del nodo son insatisfacibles, y en ese caso el nodo se poda. Su presencia mantiene el LP factible y con duales bien definidos durante toda la generación de columnas.
+    \item \textbf{Reutilización de los modelos de pricing.} El MILP de pricing de cada tipo se construye una sola vez por nodo; entre iteraciones de CG solo se actualiza su función objetivo con los duales nuevos (vía \texttt{freeTransform} de PySCIPOpt), siguiendo la recomendación del enunciado de modificar dinámicamente un modelo ya ejecutado en lugar de reconstruirlo desde cero.
+    \item \textbf{Tolerancias y salvaguardas.} Ganancia reducida mínima $\varepsilon = 10^{-4}$, tolerancia de integralidad $10^{-5}$ y de poda $10^{-6}$; tope de 500 nodos como resguardo ante árboles patológicos. El certificado de optimalidad solo se declara si el árbol se agotó sin alcanzar ninguno de los límites.
+\end{itemize}
 
 \newpage
 \section{Evaluación Comparativa}

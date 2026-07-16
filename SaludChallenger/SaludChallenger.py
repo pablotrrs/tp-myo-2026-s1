@@ -369,6 +369,16 @@ def cg_en_nodo(nodo: Nodo, pool: List[dict], existentes: set, pacientes: List[Pa
                     existentes.add(clave)
                     stats["cols_generadas"] += 1
                     agregadas += 1
+                else:
+                    # La columna ya está en el pool: si fue eliminada hay que
+                    # revivirla, o la cota LP del nodo quedaría subestimada
+                    for r in pool:
+                        if (r["eliminada"] and r["tipo_combi"] == tipo
+                                and tuple(r["camino"]) == clave[1]):
+                            r["eliminada"] = False
+                            r["sin_uso"] = 0
+                            agregadas += 1
+                            break
 
         if agregadas == 0:
             return obj, yvals, art, True
