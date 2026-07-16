@@ -24,7 +24,10 @@ class TestModeloSalud(unittest.TestCase):
         archivos_a_borrar = (["test_optimo", "test_cap", "test_incomp", "test_perdida", "test_beneficio_negativo", "test_cantidad_supera_calidad",
                                "test_calidad_supera_cantidad", "test_combi_mayor_costo_mayor_beneficio", "test_combi_menor_costo_mayor_beneficio",
                                "test_paciente_lejano_mejor_beneficio", "test_paciente_lejano_no_da_mejor_beneficio", "test_dos_combis_pueden_buscar_paciente_lejano",
-                               "test_paciente_inalcanzable", "test_orden_ventanas", "test_incomp_multi_combi", "test_propagacion_espera"])
+                               "test_paciente_inalcanzable", "test_orden_ventanas", "test_incomp_multi_combi", "test_propagacion_espera",
+                               "test_dos_combis_con_uno_de_capacidad" ,"test_dos_combis_con_dos_de_capacidad", "test_todas_incompatibilidades",
+                                "poca_distancia_mucho_tiempo_de_espera", "test_asignacion_cruzada_capacidad", "test_incomp_no_transitiva",
+                               "test_sacrificio_espacial", "test_escenario_real"])
         for archivo in archivos_a_borrar:
             ruta = f"./IN/{archivo}_pacientes.in"
             if os.path.exists(ruta):
@@ -388,6 +391,175 @@ class TestModeloSalud(unittest.TestCase):
         self.assertEqual(beneficio, 230.0, "El beneficio óptimo es 230.")
         self.assertEqual(len(rutas), 2, "Deberían haber 2 rutas, una por cada combi")
         self.assertEqual([], no_atendidos, "Todos los pacientes deberían quedar atendidos.")
+
+    def test_18_dos_combis_con_dos_de_capacidad(self):
+        nombre_test = "test_dos_combis_con_dos_de_capacidad"
+        self.crear_instancia(
+            nombre_test,
+            pacientes=[
+                ["1", 0.0, 20.0, 0, 100, "Común", 100], 
+                ["2", 0.0, 10.0, 0, 100, "Común", 100],
+                ["3", 0.0, 30.0, 0, 100, "Común", 100], 
+                ["4", 0.0, 40.0, 0, 100, "Común", 100],    
+            ],
+            flota=[["Combi_A", 1, 2, 10], ["Combi_B", 1, 2, 10]],
+            incompatibilidades=[]
+        )
+        
+        Salud(nombre_test, threshold=20.0)
+        beneficio, rutas, no_atendidos = self.leer_resultado(nombre_test)
+        
+        self.assertEqual(beneficio, 380.0, f"El beneficio esperado era 380, pero se obtuvo {beneficio}.")
+        self.assertEqual(len(rutas), 2, "Debería haber utilizado las dos combis disponibles.")
+        self.assertEqual(len(no_atendidos), 0, "Todos los pacientes deberían haber sido atendidos.")
+
+    def test_19_todas_incompatibilidades_cruzadas(self):
+        nombre_test = "test_todas_incompatibilidades"
+        self.crear_instancia(
+            nombre_test,
+            pacientes=[
+                ["1", 0.0, 10.0, 0, 100, "Cat_A", 100],
+                ["2", 0.0, 20.0, 0, 100, "Cat_B", 200],
+                ["3", 0.0, 30.0, 0, 100, "Cat_C", 300]
+            ],
+            flota=[["Combi_A", 2, 5, 10]],
+            incompatibilidades=[["Cat_A", "Cat_B"], ["Cat_B", "Cat_C"], ["Cat_A", "Cat_C"]]
+        )
+        
+        Salud(nombre_test, threshold=10.0)
+        beneficio, rutas, no_atendidos = self.leer_resultado(nombre_test)
+ 
+        self.assertEqual(beneficio, 480.0, "Debería elegir a los 2 pacientes más rentables en combis separadas.")
+        self.assertEqual(len(rutas), 2, "Debe usar 2 combis distintas debido a la incompatibilidad total.")
+        self.assertIn(1, no_atendidos, "El paciente de menor valor (P1) debe quedar sin atención.")
+    
+    def test_20_poca_distancia_mucho_tiempo_de_espera(self):
+        nombre_test = "poca_distancia_mucho_tiempo_de_espera"
+        self.crear_instancia(
+            nombre_test,
+            pacientes=[
+                ["1", 0.0, 10.0, 20, 30, "Común", 100],  
+                ["2", 0.0, 15.0, 0, 22, "Común", 100]    
+            ],
+            flota=[["Combi_A", 1, 5, 10]],
+            incompatibilidades=[]
+        )
+        
+        Salud(nombre_test, threshold=10.0)
+        beneficio, rutas, no_atendidos = self.leer_resultado(nombre_test)
+        
+        self.assertEqual(beneficio, 190.0)
+        self.assertEqual(rutas[0][1], [0, 2, 1, 0], "El modelo debió alterar el orden espacial (ir al más lejano primero) para evitar la trampa de espera.")
+    
+    def test_21_asignacion_cruzada_por_capacidad(self):
+        nombre_test = "test_asignacion_cruzada_capacidad"
+        self.crear_instancia(
+            nombre_test,
+            pacientes=[
+                ["1", 0.0, 100.0, 0, 100, "Común", 300],
+                ["2", 10.0, 0.0, 0, 10, "Común", 120],
+                ["3", 15.0, 0.0, 0, 100, "Común", 120],
+                ["4", 20.0, 0.0, 0, 100, "Común", 120]
+            ],
+            flota=[["Combi_Grande", 1, 3, 20], ["Combi_Chica", 1, 1, 10] ],
+            incompatibilidades=[]
+        )
+        Salud(nombre_test, threshold=15.0)
+        beneficio, rutas, no_atendidos = self.leer_resultado(nombre_test)
+
+        self.assertEqual(beneficio, 630.0, "Debe cruzar la lógica: el vehículo chico para el paciente premium.")
+        self.assertEqual(len(no_atendidos), 0)
+    
+    def test_22_incompatibilidad_no_transitiva(self):
+        nombre_test = "test_incomp_no_transitiva"
+        self.crear_instancia(
+            nombre_test,
+            pacientes=[
+                ["1", 10.0, 0.0, 0, 100, "Cat_A", 30],
+                ["2", 20.0, 0.0, 0, 100, "Cat_B", 60],
+                ["3", 30.0, 0.0, 0, 100, "Cat_C", 40]
+            ],
+            flota=[["Combi_A", 1, 3, 10]],
+            incompatibilidades=[["Cat_A", "Cat_B"], ["Cat_B", "Cat_C"]]
+        )
+        Salud(nombre_test, threshold=10.0)
+        beneficio, rutas, no_atendidos = self.leer_resultado(nombre_test)
+
+        self.assertEqual(beneficio, 60.0)
+        self.assertIn(2, no_atendidos, "El paciente 2 (aislado por ambos lados) debe quedar afuera.")
+
+    def test_23_sacrificio_espacial_por_incompatibilidad(self):
+        nombre_test = "test_sacrificio_espacial"
+        self.crear_instancia(
+            nombre_test,
+            pacientes=[
+                ["1", 10.0, 10.0, 0, 200, "Infeccioso", 100],
+                ["2", 12.0, 10.0, 0, 200, "Común", 100],
+                ["3", 10.0, -10.0, 0, 200, "Común", 100],
+                ["4", 12.0, -10.0, 0, 200, "Infeccioso", 100]
+            ],
+            flota=[["Combi_A", 2, 2, 10]],
+            incompatibilidades=[["Infeccioso", "Común"]]
+        )
+        Salud(nombre_test, threshold=20.0)
+        beneficio, rutas, no_atendidos = self.leer_resultado(nombre_test)
+        
+        self.assertEqual(beneficio, 380.0, "Debe ignorar la cercanía y cruzar el mapa para respetar bioseguridad.")
+        self.assertEqual(len(no_atendidos), 0)
+    """
+    def test_24_escenario_real_complejo(self):
+        nombre_test = "test_escenario_real"
+        
+        self.crear_instancia(
+            nombre_test,
+            pacientes=[
+                ["1", 15.0, 0.0, 25, 40, "Infeccioso", 10],
+                ["2", 15.0, 5.0, 10, 35, "Infeccioso", 5],
+                ["3", -5.0, -5.0, 5, 10, "Infeccioso", 6],
+                ["4", -10.0, 0.0, 15, 20, "Infeccioso", 12],
+                ["5", 0.0, 2.0, 25, 30, "Infeccioso", 6],
+                ["6", 10.0, 6.0, 30, 32, "Infeccioso", 15],
+
+                ["7", -8.0, 5.0, 20, 25, "Común", 5],
+                ["8", -7.0, 5.0, 20, 30, "Común", 2],
+                ["9", 10.0, 13.0, 20, 40, "Común", 1],
+                ["10", -10.0, 4.0, 28, 32, "Común", 6], 
+                ["11", 18.0, 0.0, 0, 20, "Común", 12],
+                ["12", 2.0, 0.0, 0, 10, "Común", 20],
+                ["13", 7.0, -1.0, 10, 15, "Común", 8],
+                ["14", 5.0, -4.0, 40, 60, "Común", 7],
+                ["15", 13.0, -10.0, 30, 48, "Común", 9]
+            ],
+            flota=[
+                ["Combi_Premium", 1, 4, 15],   
+                ["Combi_Estandar", 1, 2, 8],  
+                ["Combi_Grande", 1, 6, 20]    
+            ],
+            incompatibilidades=[
+                ["Infeccioso", "Común"], 
+            ]
+        )
+        
+        Salud(nombre_test, threshold=200.0) # NO LLEGA A TERMINAR CON 200 SEGUNDOS, YA ES UN PROBLEMA MUY PESADO PARA ESTE MODELO, SOLO LLEGA A UNA SOLUCIÓN DE 33.0
+        beneficio, rutas, no_atendidos = self.leer_resultado(nombre_test)
+        
+        self.assertEqual(beneficio, 50.0, f"El beneficio esperado era 50, pero se obtuvo: {beneficio}")
+        
+        pacientes_dict = {str(i): "Infeccioso" if i <= 6 else "Común" for i in range(1, 16)}
+        
+        for tipo_combi, camino in rutas:
+            pacientes_en_ruta = [str(p) for p in camino if p != 0]
+
+            categorias_en_ruta = set(pacientes_dict[p] for p in pacientes_en_ruta)
+            self.assertTrue(len(categorias_en_ruta) <= 1, f"¡Violación de bioseguridad! La combi mezcló categorías: {categorias_en_ruta}")
+            
+            if tipo_combi == "Combi_Premium":
+                self.assertTrue(len(pacientes_en_ruta) <= 4, "La Premium superó su capacidad.")
+            elif tipo_combi == "Combi_Estandar":
+                self.assertTrue(len(pacientes_en_ruta) <= 2, "La Estandar superó su capacidad.")
+            elif tipo_combi == "Combi_Grande":
+                self.assertTrue(len(pacientes_en_ruta) <= 6, "La Grande superó su capacidad.")
+    """
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

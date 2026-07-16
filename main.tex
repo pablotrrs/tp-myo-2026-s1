@@ -356,20 +356,86 @@ Asegura que:
 
 \subsection{Descripción de la Estrategia}
 
-[SECCIÓN A COMPLETAR]
-
-La estrategia SaludCG implementa un enfoque de \textbf{Generación de Columnas (Column Generation, CG)} para resolver el problema de manera más escalable. Este método descompone el problema original en:
+La estrategia SaludCG implementa un enfoque de \textbf{Generación de Columnas (Column Generation, CG)} para resolver el problema de ruteo de vehículos de manera escalable y estructurada. A diferencia de la Estrategia 1, que evalúa todas las combinaciones topológicas simultáneamente en un modelo compacto, este método descompone el problema original en dos componentes matemáticos que dialogan entre sí:
 
 \begin{itemize}
-    \item \textbf{Problema Maestro}: Selecciona rutas de un conjunto disponible, minimizando costo/maximizando beneficio
-    \item \textbf{Subproblema de Pricing}: Genera nuevas rutas con costo reducido negativo
+    \item \textbf{Problema Maestro}: Evalúa un \textit{pool} (subconjunto) restringido de rutas previamente construidas y selecciona la combinación óptima para maximizar la rentabilidad, determinando a su vez el valor marginal de cada recurso.
+    \item \textbf{Subproblema de Pricing}: Es un modelo MILP independiente por cada tipo de vehículo. Utiliza los precios sombra del Maestro para explorar el espacio de soluciones y descubrir nuevas rutas que, de agregarse al pool, mejorarían el beneficio global.
 \end{itemize}
 
-El proceso itera hasta convergencia LP, permitiendo manejar instancias más grandes.
+El proceso ejecuta un bucle continuo entre ambos modelos. Finaliza únicamente cuando los subproblemas de Pricing demuestran matemáticamente que ya no existe ninguna ruta capaz de mejorar la solución actual, o cuando se activa un resguardo de tiempo límite.
 
 \subsection{Modelo Matemático}
 
-[A COMPLETAR]
+\subsubsection{Problema Maestro Relajado}
+
+El Problema Maestro abstrae la topología del ruteo y se concentra puramente en la selección de conjuntos. Sea $\Omega$ el conjunto dinámico de rutas generadas hasta el momento, y $\Omega_k \subseteq \Omega$ las rutas pertenecientes al tipo de vehículo $k$.
+
+\textbf{Conjuntos y Parámetros:}
+\begin{itemize}
+    \item $P$: Conjunto de todos los pacientes solicitantes.
+    \item $K$: Conjunto de los tipos de vehículos disponibles en la flota.
+    \item $\Omega$: Conjunto dinámico de rutas generadas hasta el momento en el \textit{pool}.
+    \item $\Omega_k \subseteq \Omega$: Subconjunto de rutas factibles pertenecientes al tipo de vehículo $k \in K$.
+    \item $\text{rentabilidad}_r$: Beneficio neto de la ruta $r \in \Omega$ (suma de los beneficios de los pacientes atendidos menos el costo operativo de la combi).
+    \item $\text{cant\_disponible}_k$: Stock máximo o cantidad de unidades físicas disponibles del vehículo tipo $k$.
+    \item $p \in r$: Condición lógica que indica que el paciente $p$ es visitado dentro de la secuencia de la ruta $r$.
+\end{itemize}
+
+\textbf{Variable de Decisión:}
+\begin{itemize}
+    \item $y_r \in [0, 1]$: Variable continua que representa la fracción de utilización de la ruta $r \in \Omega$.
+\end{itemize}
+
+\textbf{Formulación:}
+\begin{align}
+  \max & \quad Z = \sum_{r \in \Omega} \text{rentabilidad}_r \cdot y_r \label{eq:cg_obj}\\
+  \text{s.a.} & \quad \sum_{r \in \Omega: p \in r} y_r \leq 1 \quad \forall p \in P \quad (\text{Dual: } \pi_p \geq 0) \label{eq:cg_pacientes}\\
+  & \quad \sum_{r \in \Omega_k} y_r \leq \text{cant\_disponible}_k \quad \forall k \in K \quad (\text{Dual: } \mu_k \geq 0) \label{eq:cg_flota}
+\end{align}
+
+La restricción \eqref{eq:cg_pacientes} garantiza que cada paciente se atienda a lo sumo una vez. De aquí se extrae el dual $\pi_p$, que funciona como el "precio sombra" o costo de oportunidad que el sistema está pagando por ese paciente. La restricción \eqref{eq:cg_flota} limita el uso de la flota al stock real, extrayendo el dual $\mu_k$ que penaliza el agotamiento de vehículos.
+
+\subsubsection{Subproblema de Pricing}
+
+Por cada iteración y tipo de combi $k$, se resuelve un problema de ruteo elemental con recolección y ventanas de tiempo (VRPTW).
+
+\textbf{Objetivo del Pricing:}
+Maximizar la \textbf{ganancia reducida} ($\bar{c}$) de una potencial nueva ruta:
+\begin{align}
+  \max \quad & \bar{c} = \sum_{p \in P} (\text{beneficio}_p - \pi_p) \cdot z_p - \text{costo\_operacion}_k - \mu_k \label{eq:cg_pricing}
+\end{align}
+
+Sujeto a las siguientes restricciones operativas:
+\begin{itemize}
+    \item Límite de capacidad máxima de asientos para la combi $k$.
+    \item Conservación estricta de flujo de red (ingreso y egreso secuencial) con inicio y fin en el centro médico.
+    \item Propagación del tiempo ($T_i$) y respeto de las ventanas horarias estipuladas con restricciones Big-M.
+    \item Incompatibilidades de bioseguridad entre categorías de pacientes.
+\end{itemize}
+
+Si el solver encuentra una solución factible cuya ganancia reducida $\bar{c}$ es estrictamente mayor que $10^{-4}$, la secuencia de nodos se traduce a un formato estructurado y se inyecta como una nueva columna $r$ en el \textit{pool} del Maestro. 
+
+\subsection{Detalles de Implementación}
+
+Para asegurar la estabilidad del solver SCIP y acelerar dramáticamente la convergencia, la estrategia incluye heurísticas de inicialización y barreras de contención numérica.
+
+\subsubsection{Inicialización Golosa Diversificada y Filtro Anti-Degeneración}
+Evitar la "trampa de la degeneración dual" es crítico. Si el Maestro comienza vacío o con poca variedad, generará duales erráticos que colapsarán la resolución. Se pre-puebla el pool $\Omega$ mediante el siguiente algoritmo:
+
+\begin{enumerate}
+    \item \textbf{Rutas Directas:} Se construyen trayectos simples de ida y vuelta para cada paciente y cada tipo de vehículo compatible.
+    \item \textbf{Barrido Goloso Múltiple:} Se generan itinerarios complejos priorizando los pacientes bajo tres métricas independientes: mayor beneficio puro, menor distancia euclidiana, y mejor ratio beneficio/distancia. 
+    \item \textbf{Descarte Temporal:} Para forzar la creación de clústeres geográficos variados, una vez que la heurística agrupa a un conjunto de pacientes, los marca como temporalmente "ocupados" y repite el bucle sobre los pacientes restantes hasta agotar la población.
+    \item \textbf{Filtro de Unicidad:} Antes de inyectar los candidatos, se procesan mediante un mapa de \textit{hash} basado en el tipo de vehículo y la secuencia de su camino. Toda ruta estructuralmente duplicada se descarta para mantener la matriz del Maestro matemáticamente limpia.
+\end{enumerate}
+
+A su vez, al extraer los precios sombra del modelo relajado, se aplica una función de saneamiento que topa los duales anómalos o infinitos originados por fallos del motor interno de SCIP, asumiendo un valor máximo seguro ($< 10^{10}$).
+
+\subsubsection{Resolución Entera Final (Maestro IP)}
+Como la Generación de Columnas trabaja sobre un modelo continuo, los resultados de $y_r$ en la última iteración pueden ser fraccionarios. El proceso concluye instanciando un nuevo modelo \textbf{Maestro Entero} (`MaestroInteger`). 
+
+Este modelo toma todas las rutas descubiertas a lo largo del proceso en el \textit{pool} final, pero fuerza las variables de selección a un dominio binario ($y^{int}_r \in \{0, 1\}$). Se le asigna el tiempo restante de ejecución (con una reserva mínima garantizada de 5 segundos) para hallar la combinación entera óptima, que luego se formatea y exporta estrictamente bajo la topología requerida.
 
 \newpage
 \section{Estrategia 3: SaludChallenger (Branch \& Price)}

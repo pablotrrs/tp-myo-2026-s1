@@ -1,12 +1,9 @@
-"""
-Estrategia 2: SaludCG(instancia, umbral)
-Resuelve el problema aplicando Generación de Columnas mediante un enfoque estructurado.
-"""
-
 import sys
 import os
 import time
 from typing import Tuple, List, Dict
+
+from utils_saludCG import generar_rutas_iniciales
 
 root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(root)
@@ -18,25 +15,6 @@ from Salud.utils_salud import (
     generar_matriz_distancias, generar_salida
 )
 
-def generar_rutas_iniciales_basicas(pacientes: List[Paciente], centro: Paciente, flota: Dict[str, TipoCombi], distancias: dict) -> List[dict]:
-    rutas = []
-    tipo_default = list(flota.keys())[0]
-    
-    for p in pacientes:
-        dist_ida = distancias.get((centro.id, p.id), 0)
-        dist_vuelta = distancias.get((p.id, centro.id), 0)
-        dist_total = dist_ida + dist_vuelta
-        
-        tiempo_llegada = dist_ida
-        if tiempo_llegada <= p.ih_fin:
-            nueva_ruta = {
-                "tipo_combi": tipo_default,
-                "pacientes_ids": [p.id],
-                "camino": [centro.id, p.id, centro.id],
-                "rentabilidad": p.beneficio - flota[tipo_default].costo_operacion
-            }
-            rutas.append(nueva_ruta)
-    return rutas
 
 def construir_subproblema_base(tipo_k: str, combi_info: TipoCombi, pacientes: List[Paciente], 
                                centro: Paciente, distancias: dict, incomp: set, M: float) -> Tuple[Model, dict, dict]:
@@ -190,7 +168,7 @@ def SaludCG(instancia: str, threshold: float) -> bool:
             submodelos[tipo_k] = construir_subproblema_base(tipo_k, combi_info, pacientes, centro, distancias, incomp, M)
         
         # Pool dinámico de columnas (rutas iniciales vacías, CG generará las necesarias)
-        pool_rutas = generar_rutas_iniciales_basicas(pacientes, centro, flota, distancias)
+        pool_rutas = generar_rutas_iniciales(pacientes, centro, flota, distancias, incomp, pac_dict)
         
         # ===== BUCLE PRINCIPAL DE GENERACIÓN DE COLUMNAS =====
         iteracion = 0
