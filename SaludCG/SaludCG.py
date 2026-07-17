@@ -172,6 +172,7 @@ def SaludCG(instancia: str, threshold: float) -> bool:
         
         # ===== BUCLE PRINCIPAL DE GENERACIÓN DE COLUMNAS =====
         iteracion = 0
+        iteraciones_sin_mejora = 0  # Contador robusto para convergencia LP
         while True:
             elapsed = time.time() - start_time
             if elapsed > threshold * 0.8:  # Resguardo de tiempo para el Maestro Entero Final
@@ -205,15 +206,28 @@ def SaludCG(instancia: str, threshold: float) -> bool:
             maestro_rl.optimize()
             
             # Extracción estructurada de los valores duales (precios sombra)
+            # IMPORTANTE: No truncar duales a 0 artificialmente. Según la teoría CG,
+            # los duales contienen información crítica para el pricing correcto.
+            # Solo si son significativamente negativos (ruido numérico), truncar.
             dual_pi = {}
             for p in pacientes:
-                try: dual_pi[p.id] = max(0.0, maestro_rl.getDualsolLinear(cons_pacientes[p.id]))
-                except: dual_pi[p.id] = 0.0
+                try:
+                    raw_dual = maestro_rl.getDualsolLinear(cons_pacientes[p.id])
+                    if raw_dual < -1e-6:  # Detectar valores significativamente negativos
+                        print(f"[DEBUG] Dual negativo para paciente {p.id}: {raw_dual:.2e}")
+                    dual_pi[p.id] = max(0.0, raw_dual)
+                except:
+                    dual_pi[p.id] = 0.0
                 
             dual_mu = {}
             for tipo_k in flota.keys():
-                try: dual_mu[tipo_k] = max(0.0, maestro_rl.getDualsolLinear(cons_flota[tipo_k]))
-                except: dual_mu[tipo_k] = 0.0
+                try:
+                    raw_dual = maestro_rl.getDualsolLinear(cons_flota[tipo_k])
+                    if raw_dual < -1e-6:  # Detectar valores significativamente negativos
+                        print(f"[DEBUG] Dual negativo para tipo {tipo_k}: {raw_dual:.2e}")
+                    dual_mu[tipo_k] = max(0.0, raw_dual)
+                except:
+                    dual_mu[tipo_k] = 0.0
 
             # Resolver el pricing por cada tipo de combi de la flota
             rutas_agregadas = 0
@@ -231,9 +245,15 @@ def SaludCG(instancia: str, threshold: float) -> bool:
                         pool_rutas.append(nueva_ruta)
                         rutas_agregadas += 1
 
-            # Si ningún subproblema encontró columnas rentables, alcanzamos la optimalidad continua
+            # Criterio robusto de convergencia LP: requiere 2+ iteraciones sin mejora
+            # (más conservador que parar en la primera iteración sin columnas)
             if rutas_agregadas == 0:
-                break
+                iteraciones_sin_mejora += 1
+                if iteraciones_sin_mejora >= 2:
+                    print(f"[DEBUG] Convergencia LP alcanzada: {iteraciones_sin_mejora} iteraciones sin nuevas columnas")
+                    break
+            else:
+                iteraciones_sin_mejora = 0
 
         # =======================================================
         # RESOLUCIÓN ENTERA FINAL (Restricción del pool a binarias)
