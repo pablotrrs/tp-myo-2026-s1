@@ -109,19 +109,44 @@ def priorizar_coeficiente(pacientes, centro, distancias, rutas, tipo_k, combi_in
 
 
 def generar_ruta_golosa(centro, distancias, p_ordenados, capacidad, incomp, pac_dict):
+    """Construye una ruta golosa respetando ventanas de tiempo, capacidad e incompatibilidades.
+    IMPORTANTE: Valida la factibilidad de cierre (retorno al centro) antes de agregar pacientes.
+    """
     ruta_actual = []
     carga_actual = 0
     tiempo_actual = 0
     posicion_actual = centro.id
     
     for p in p_ordenados:
-        dist = distancias.get((posicion_actual, p.id), 0)
-        if (carga_actual < capacidad and llega_a_tiempo(p, tiempo_actual + dist)
-            and es_compatible(p.id, ruta_actual, incomp, pac_dict)):
-            ruta_actual.append(p.id)
-            tiempo_actual = max(p.ih_inicio, tiempo_actual + dist)
-            posicion_actual = p.id
-            carga_actual += 1
+        dist_to_p = distancias.get((posicion_actual, p.id), 0)
+        tiempo_llegada_p = tiempo_actual + dist_to_p
+        
+        # Validar que la combi llegue dentro de la ventana del paciente
+        if not llega_a_tiempo(p, tiempo_llegada_p):
+            continue
+        
+        # Validar compatibilidad de bioseguridad
+        if not es_compatible(p.id, ruta_actual, incomp, pac_dict):
+            continue
+        
+        # Validar que haya capacidad
+        if carga_actual >= capacidad:
+            continue
+        
+        # NUEVO: Validar que se pueda retornar al centro desde este paciente
+        tiempo_después_p = max(p.ih_inicio, tiempo_llegada_p)  # Espera si es necesario
+        dist_p_to_centro = distancias.get((p.id, centro.id), 0)
+        tiempo_regreso = tiempo_después_p + dist_p_to_centro
+        
+        # Si el retorno es infactible (tiempo infinito), no agregar este paciente
+        if dist_p_to_centro >= 9999 or tiempo_regreso > 99999:
+            continue
+        
+        # Agregar paciente a la ruta
+        ruta_actual.append(p.id)
+        tiempo_actual = tiempo_después_p
+        posicion_actual = p.id
+        carga_actual += 1
 
     return ruta_actual
 
