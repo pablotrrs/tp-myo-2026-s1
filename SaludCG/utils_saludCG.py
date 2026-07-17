@@ -67,7 +67,11 @@ def priorizar_distancia(pacientes, centro, distancias, rutas, tipo_k, combi_info
     costo = combi_info.costo_operacion
     
     while pacientes_disponibles:
-        p_ordenados = sorted(pacientes_disponibles, key=lambda p: distancias.get((centro.id, p.id), 9999))
+        # Ordenar por distancia al centro; si no existe arco, se asigna distancia infinita
+        def dist_valida(p):
+            return distancias.get((centro.id, p.id), float('inf'))
+        
+        p_ordenados = sorted(pacientes_disponibles, key=dist_valida)
         ruta_obtenida = generar_ruta_golosa(centro, distancias, p_ordenados, capacidad, incomp, pac_dict)
                 
         if not ruta_obtenida:
@@ -88,8 +92,11 @@ def priorizar_coeficiente(pacientes, centro, distancias, rutas, tipo_k, combi_in
     costo = combi_info.costo_operacion
     
     def ratio(p):
-        dist = distancias.get((centro.id, p.id), 1.0)
-        return p.beneficio / dist
+        # Si no existe arco al paciente, asignar ratio 0 (baja prioridad)
+        dist = distancias.get((centro.id, p.id), float('inf'))
+        if dist == float('inf'):
+            return 0.0
+        return p.beneficio / dist if dist > 0 else float('inf')
 
     while pacientes_disponibles:
         p_ordenados = sorted(pacientes_disponibles, key=ratio, reverse=True)
@@ -110,7 +117,7 @@ def priorizar_coeficiente(pacientes, centro, distancias, rutas, tipo_k, combi_in
 
 def generar_ruta_golosa(centro, distancias, p_ordenados, capacidad, incomp, pac_dict):
     """Construye una ruta golosa respetando ventanas de tiempo, capacidad e incompatibilidades.
-    IMPORTANTE: Valida la factibilidad de cierre (retorno al centro) antes de agregar pacientes.
+    IMPORTANTE: Distingue explícitamente entre arcos válidos e inválidos (ausencia de distancia).
     """
     ruta_actual = []
     carga_actual = 0
@@ -118,7 +125,12 @@ def generar_ruta_golosa(centro, distancias, p_ordenados, capacidad, incomp, pac_
     posicion_actual = centro.id
     
     for p in p_ordenados:
-        dist_to_p = distancias.get((posicion_actual, p.id), 0)
+        # Verificar explícitamente que el arco (posicion_actual -> p) existe
+        arco_key = (posicion_actual, p.id)
+        if arco_key not in distancias:
+            continue  # Arco no existe, no se puede visitar este paciente
+        
+        dist_to_p = distancias[arco_key]
         tiempo_llegada_p = tiempo_actual + dist_to_p
         
         # Validar que la combi llegue dentro de la ventana del paciente
@@ -133,14 +145,17 @@ def generar_ruta_golosa(centro, distancias, p_ordenados, capacidad, incomp, pac_
         if carga_actual >= capacidad:
             continue
         
-        # NUEVO: Validar que se pueda retornar al centro desde este paciente
+        # Validar que el arco (p -> centro) existe y cierre es factible
+        arco_return_key = (p.id, centro.id)
+        if arco_return_key not in distancias:
+            continue  # No existe forma de retornar al centro desde este paciente
+        
+        dist_p_to_centro = distancias[arco_return_key]
         tiempo_después_p = max(p.ih_inicio, tiempo_llegada_p)  # Espera si es necesario
-        dist_p_to_centro = distancias.get((p.id, centro.id), 0)
         tiempo_regreso = tiempo_después_p + dist_p_to_centro
         
-        # Si el retorno es infactible (tiempo infinito), no agregar este paciente
-        if dist_p_to_centro >= 9999 or tiempo_regreso > 99999:
-            continue
+        # Si el tiempo de regreso es finito, el paciente es factible
+        # (asumiendo que tiempo_regreso < infinito es garantizado por distancia finita)
         
         # Agregar paciente a la ruta
         ruta_actual.append(p.id)

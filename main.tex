@@ -435,7 +435,7 @@ Evitar la "trampa de la degeneración dual" es crítico. Si el Maestro comienza 
 \end{enumerate}
 
 \subsubsection{Saneamiento y Diagnóstico de Duales}
-Al extraer los precios sombra ($\pi_p$, $\mu_k$) del modelo relajado, se implementan dos niveles de validación. Primero, se detectan duales \textbf{significativamente negativos} (menores a $-10^{-6}$), que violarían la teoría de dualidad en máxima con restricciones $\leq$, y se registran mediante mensajes de diagnóstico para facilitar troubleshooting. Segundo, se topa los duales anómalos o infinitos originados por fallos del motor interno de SCIP, asumiendo un valor máximo seguro ($< 10^{10}$). Solo después de esta validación se procesan los duales para el siguiente ciclo de pricing.
+Al extraer los precios sombra ($\pi_p$, $\mu_k$) del modelo relajado, se implementa un proceso de validación y diagnóstico. Primero, se detectan duales \textbf{significativamente negativos} (menores a $-10^{-6}$), que violarían la teoría de dualidad en máxima con restricciones $\leq$, y se registran mediante mensajes de diagnóstico para facilitar troubleshooting de problemas en el modelo o el solver. Segundo, cualquier dual extraído que sea negativo (incluyendo pequeños valores, típicamente ruido numérico del solver) se trunca a 0.0 mediante la operación $\max(0.0, \text{raw\_dual})$, garantizando que los duales respeten la teoría. Este enfoque conservador preserva la estabilidad numérica mientras permite la detección de anomalías.
 
 \subsubsection{Resolución Entera Final (Maestro IP)}
 Como la Generación de Columnas trabaja sobre un modelo continuo, los resultados de $y_r$ en la última iteración pueden ser fraccionarios. El proceso concluye instanciando un nuevo modelo \textbf{Maestro Entero} (`MaestroInteger`). 
