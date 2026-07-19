@@ -243,14 +243,6 @@ def SaludCG(instancia: str, threshold: float) -> bool:
                         pool_rutas.append(nueva_ruta)
                         rutas_agregadas += 1
 
-            print("ITER",iteracion)
-
-            print(dual_pi)
-
-            print(dual_mu)
-
-            print(gr)
-
             # Si ningún subproblema encontró columnas rentables, alcanzamos la optimalidad continua
             if rutas_agregadas == 0:
                 break
