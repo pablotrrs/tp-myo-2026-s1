@@ -194,26 +194,38 @@ def SaludCG(instancia: str, threshold: float) -> bool:
             cons_pacientes = {}
             for p in pacientes:
                 rutas_con_p = [idx for idx, r in enumerate(pool_rutas) if p.id in r["pacientes_ids"]]
-                cons_pacientes[p.id] = maestro_rl.addCons(quicksum(y[idx] for idx in rutas_con_p) <= 1)
+                cons_pacientes[p.id] = maestro_rl.addCons(
+                    quicksum(y[idx] for idx in rutas_con_p) <= 1, 
+                    modifiable=True  # Mantiene la restricción viva
+                )
                 
             # Restricción Maestro: No superar la cantidad de vehículos disponibles de la flota
             cons_flota = {}
             for tipo_k, combi_info in flota.items():
                 rutas_tipo = [idx for idx, r in enumerate(pool_rutas) if r["tipo_combi"] == tipo_k]
-                cons_flota[tipo_k] = maestro_rl.addCons(quicksum(y[idx] for idx in rutas_tipo) <= combi_info.cant_disponible)
+                cons_flota[tipo_k] = maestro_rl.addCons(
+                    quicksum(y[idx] for idx in rutas_tipo) <= combi_info.cant_disponible, 
+                    modifiable=True  # Mantiene la restricción viva
+                )
                 
             maestro_rl.optimize()
             
-            # Extracción estructurada de los valores duales (precios sombra)
+            # Extracción estructurada de los valores duales (AMBAS CORRECCIONES)
             dual_pi = {}
             for p in pacientes:
-                try: dual_pi[p.id] = max(0.0, maestro_rl.getDualsolLinear(cons_pacientes[p.id]))
-                except: dual_pi[p.id] = 0.0
+                try: 
+                    val = maestro_rl.getDualsolLinear(cons_pacientes[p.id])
+                    dual_pi[p.id] = max(0.0, -val) if abs(val) < 1e10 else 0.0
+                except: 
+                    dual_pi[p.id] = 0.0
                 
             dual_mu = {}
             for tipo_k in flota.keys():
-                try: dual_mu[tipo_k] = max(0.0, maestro_rl.getDualsolLinear(cons_flota[tipo_k]))
-                except: dual_mu[tipo_k] = 0.0
+                try: 
+                    val = maestro_rl.getDualsolLinear(cons_flota[tipo_k])
+                    dual_mu[tipo_k] = max(0.0, -val) if abs(val) < 1e10 else 0.0
+                except: 
+                    dual_mu[tipo_k] = 0.0
 
             # Resolver el pricing por cada tipo de combi de la flota
             rutas_agregadas = 0
@@ -230,6 +242,14 @@ def SaludCG(instancia: str, threshold: float) -> bool:
                     if not ya_existe:
                         pool_rutas.append(nueva_ruta)
                         rutas_agregadas += 1
+
+            print("ITER",iteracion)
+
+            print(dual_pi)
+
+            print(dual_mu)
+
+            print(gr)
 
             # Si ningún subproblema encontró columnas rentables, alcanzamos la optimalidad continua
             if rutas_agregadas == 0:

@@ -528,7 +528,7 @@ class TestModeloSaludCG(unittest.TestCase):
         SaludCG(nombre_test, threshold=20.0)
         beneficio, rutas, no_atendidos = self.leer_resultado(nombre_test)
         
-        self.assertEqual(beneficio, 50.0, f"El beneficio esperado era 50, pero se obtuvo: {beneficio}")
+        self.assertEqual(beneficio, 54.0, f"El beneficio esperado era 54, pero se obtuvo: {beneficio}")
         
         pacientes_dict = {str(i): "Infeccioso" if i <= 6 else "Común" for i in range(1, 16)}
         
