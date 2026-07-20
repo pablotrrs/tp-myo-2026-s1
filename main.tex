@@ -271,13 +271,13 @@ donde $\mathcal{I}_{\text{pacientes}} = \{(p,q) : \text{categoria}[p], \text{cat
 
 Si dos pacientes pertenecen a categorías incompatibles, no pueden estar en el mismo vehículo.
 
-\paragraph{7. Vínculo entre llegar al vértice y atender al paciente }
+\paragraph{7. Vínculo entre visita y atención del paciente}
 
 \begin{align}
- z[p, k] \le \sum_{i \in P,i \neq p} x[i, p, k] \quad &\forall k \in K, p \in P  \label{eq:vinczx}
+  z[p, k] = \sum_{i \in V,\, i \neq p} x[i, p, k] \quad &\forall k \in K,\, p \in P \label{eq:vinczx}
 \end{align}
 
-Si un paciente p es atendido por la combi k, dicha combi debe haber pasado por el vértice de p al menos una vez.
+La sumatoria recorre todos los vértices $V = \{0\} \cup P$, incluyendo el centro médico, para capturar también los arcos directos centro$\to$paciente. La igualdad cierra ambas implicaciones: si la combi entra al nodo de un paciente, necesariamente lo recoge; y si lo recoge, alguna combi entró a su nodo.
 
 \subsubsection{Explicación de la Función Objetivo y Restricciones}
 
@@ -344,12 +344,13 @@ Aseguran que:
     \item Previene conflictos por bioseguridad o protocolo médico
 \end{itemize}
 
-\paragraph{Vínculo entre llegar al vértice y atender al paciente (Ec. \eqref{eq:vinczx})}
+\paragraph{Vínculo entre visita y atención del paciente (Ec. \eqref{eq:vinczx})}
 Asegura que:
 \begin{itemize}
-    \item Si un paciente fue atendido, entonces al menos una combi pasó por su ubicación.
-    \item Si ninguna combi pasó por su ubicación, entonces no fue atendido.
+    \item Si la combi $k$ entra al nodo de un paciente $p$, entonces lo recoge (la entrada implica atención)
+    \item Si un paciente es atendido por la combi $k$, entonces la combi debió haber entrado a su nodo (la atención implica entrada)
 \end{itemize}
+El uso de igualdad (en lugar de $\leq$) ajusta el espacio factible del LP y evita que el solver encuentre soluciones degenerades donde una combi visita un nodo sin recoger al paciente. La sumatoria sobre $V$ (no solo $P$) garantiza que los arcos directos centro$\to$paciente sean contabilizados.
 
 \newpage
 \section{Estrategia 2: SaludCG (Generación de Columnas)}

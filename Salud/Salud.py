@@ -148,6 +148,9 @@ def construir_modelo_milp(pacientes: List[Paciente], centro: Paciente,
     
     # RC5: Ventanas de tiempo
     for k in combis_disponibles:
+        # T[0,k] = 0: el viaje comienza en t=0 desde el centro médico
+        modelo.addCons(T[centro.id, k] == 0, name=f"t_inicio_{k}")
+
         # Propagación del tiempo
         for i in nodos:
             for j in nodos:
@@ -184,16 +187,17 @@ def construir_modelo_milp(pacientes: List[Paciente], centro: Paciente,
                     )
     
     # ===== CONECTAR z CON x =====
-    # z[p,k] = 1 si existe arista de entrada a p desde cualquier nodo
+    # z[p,k] = entrada al nodo p: entrar al vértice es equivalente a atender al paciente.
+    # Se usa igualdad (no <=) para cerrar ambas implicaciones:
+    #   si la combi entra, recoge; si recoge, entró.
+    # La sumatoria incluye el nodo 0 (centro) para capturar arcos directos centro→paciente.
     for k in combis_disponibles:
         for p in pacientes:
             entrada = quicksum(
                 x[i.id, p.id, k] for i in nodos
                 if i.id != p.id and (i.id, p.id) in distancias
             )
-            # Si z[p,k] = 1, entonces entrada >= 1
-            # Si entrada = 0, entonces z[p,k] = 0
-            modelo.addCons(z[p.id, k] <= entrada, name=f"z_conn_{p.id}_{k}")
+            modelo.addCons(z[p.id, k] == entrada, name=f"z_conn_{p.id}_{k}")
     
     variables_dict = {
         'x': x, 'z': z, 'a': a, 'u': u, 'T': T,
