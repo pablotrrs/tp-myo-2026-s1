@@ -399,44 +399,73 @@ La restricción \eqref{eq:cg_pacientes} garantiza que cada paciente se atienda a
 
 \subsubsection{Subproblema de Pricing}
 
-Por cada iteración y tipo de combi $k$, se resuelve un problema de ruteo elemental con recolección y ventanas de tiempo (VRPTW).
+Por cada iteración y tipo de combi $k$, se resuelve un problema de ruteo elemental con recolección y ventanas de tiempo (VRPTW) para hallar una nueva columna candidata.
 
-\textbf{Objetivo del Pricing:}
-Maximizar la \textbf{ganancia reducida} ($\bar{c}$) de una potencial nueva ruta:
+\textbf{Conjuntos y Parámetros del Subproblema:}
+\begin{itemize}
+    \item $P$: Conjunto de pacientes solicitantes.
+    \item $V = \{0\} \cup P$: Conjunto de nodos (centro médico $0$ y pacientes $P$).
+    \item $\text{beneficio}_p$: Beneficio económico/social de atender al paciente $p$.
+    \item $\text{costo\_operacion}_k$: Costo fijo de poner en servicio un vehículo del tipo $k$.
+    \item $\text{asientos}_k$: Capacidad máxima de asientos del vehículo tipo $k$.
+    \item $d_{i,j}$: Distancia euclidiana entre el nodo $i$ y el nodo $j$.
+    \item $[ih_{\text{inicio}}[p], ih_{\text{fin}}[p]]$: Ventana de tiempo estricta para la atención del paciente $p$.
+    \item $\mathcal{I}$: Conjunto de pares de categorías de pacientes incompatibles por bioseguridad.
+    \item $\pi_p$: Precios sombra (duales) del maestro asociados a la cobertura de cada paciente $p$.
+    \item $\mu_k$: Precio sombra (dual) asociado a la disponibilidad del vehículo tipo $k$.
+    \item $M$: Constante grande (Big-M) para la linealización lógica de subtours y ventanas de tiempo.
+\end{itemize}
+
+\textbf{Variables de Decisión del Subproblema:}
+\begin{itemize}
+    \item $x_{i,j} \in \{0, 1\}$: Variable binaria, igual a 1 si el vehículo viaja directamente del nodo $i$ al nodo $j$.
+    \item $z_p \in \{0, 1\}$: Variable binaria, igual a 1 si el paciente $p$ es seleccionado y atendido en la ruta.
+    \item $T_i \geq 0$: Variable continua que indica el tiempo de llegada o inicio de servicio en el nodo $i$.
+\end{itemize}
+
+\textbf{Formulación Algebraica del Pricing:}
 \begin{align}
   \max \quad & \bar{c} = \sum_{p \in P} (\text{beneficio}_p - \pi_p) \cdot z_p - \text{costo\_operacion}_k - \mu_k \label{eq:cg_pricing}
 \end{align}
+\textbf{Sujeto a:}
+\begin{align}
+  & \sum_{p \in P} z_p \leq \text{asientos}_k \label{eq:pr_cap_cg}\\
+  & \sum_{i \in V, i \neq p} x_{i,p} = z_p \quad \forall p \in P \label{eq:pr_in_cg}\\
+  & \sum_{j \in V, j \neq p} x_{p,j} = z_p \quad \forall p \in P \label{eq:pr_out_cg}\\
+  & \sum_{j \in P} x_{0,j} \leq 1 \label{eq:pr_depot_out}\\
+  & \sum_{i \in P} x_{i,0} = \sum_{j \in P} x_{0,j} \label{eq:pr_depot_in}\\
+  & \sum_{p \in P} z_p \geq \sum_{j \in P} x_{0,j} \label{eq:pr_min_visita}\\
+  & T_j \geq T_i + d_{i,j} - M(1 - x_{i,j}) \quad \forall i, j \in V, i \neq j, j \neq 0 \label{eq:pr_subtours}\\
+  & T_p \geq ih_{\text{inicio}}[p] \cdot z_p \quad \forall p \in P \label{eq:pr_tw_inf}\\
+  & T_p \leq ih_{\text{fin}}[p] \cdot z_p + M(1 - z_p) \quad \forall p \in P \label{eq:pr_tw_sup}\\
+  & z_{p1} + z_{p2} \leq 1 \quad \forall (p_1, p_2) \in \mathcal{I} \label{eq:pr_incompat}
+\end{align}
 
-Sujeto a las siguientes restricciones operativas:
+\textbf{Explicación de las Restricciones del Pricing:}
 \begin{itemize}
-    \item Límite de capacidad máxima de asientos para la combi $k$.
-    \item Conservación estricta de flujo de red (ingreso y egreso secuencial) con inicio y fin en el centro médico.
-    \item Propagación del tiempo ($T_i$) y respeto de las ventanas horarias estipuladas con restricciones Big-M.
-    \item Incompatibilidades de bioseguridad entre categorías de pacientes.
+    \item \textbf{Capacidad (\eqref{eq:pr_cap_cg}):} Limita la cantidad máxima de pacientes que puede recoger la combi según sus asientos disponibles.
+    \item \textbf{Flujo de nodos (\eqref{eq:pr_in_cg}, \eqref{eq:pr_out_cg}):} Asegura que si un paciente es atendido ($z_p = 1$), obligatoriamente una arista entra y otra sale de su nodo; si no es atendido, el flujo es cero.
+    \item \textbf{Operación del depósito (\eqref{eq:pr_depot_out}, \eqref{eq:pr_depot_in}, \eqref{eq:pr_min_visita}):} Regula que la combi realice a lo sumo un viaje partiendo y regresando al centro médico, obligándola a visitar al menos un paciente si decide salir a operar.
+    \item \textbf{Eliminación de subtours y tiempos (\eqref{eq:pr_subtours}, \eqref{eq:pr_tw_inf}, \eqref{eq:pr_tw_sup}):} Propagan el tiempo de recorrido a lo largo de las aristas y garantizan que la atención de cada paciente seleccionado ocurra estrictamente dentro de su ventana horaria de servicio.
+    \item \textbf{Incompatibilidades médicas (\eqref{eq:pr_incompat}):} Evitan que la ruta agrupe a pacientes cuyas categorías pertenezcan al conjunto de restricciones de bioseguridad $\mathcal{I}$.
 \end{itemize}
 
-Si el solver encuentra una solución factible cuya ganancia reducida $\bar{c}$ es estrictamente mayor que $10^{-4}$, la secuencia de nodos se traduce a un formato estructurado y se inyecta como una nueva columna $r$ en el \textit{pool} del Maestro. 
+Si el solver encuentra una solución factible cuya ganancia reducida $\bar{c}$ es estrictamente mayor que $10^{-4}$, la secuencia de nodos se traduce a un formato estructurado y se inyecta como una nueva columna $r$ en el \textit{pool} del Maestro.
 
-\subsection{Detalles de Implementación}
+\subsection{Inicialización de Rutas Iniciales}
 
-Para asegurar la estabilidad del solver SCIP y acelerar dramáticamente la convergencia, la estrategia incluye heurísticas de inicialización y barreras de contención numérica.
+Para garantizar una convergencia rápida y eficiente del algoritmo de Generación de Columnas, la estrategia no inicia con un pool de rutas vacío, sino que implementa una fase preliminar de inicialización inteligente en el módulo \texttt{utils\_saludCG.py}. Esta etapa combina rutas directas y enfoques heurísticos golosos para poblar el conjunto $\Omega$ con opciones de alta calidad desde la primera iteración:
 
-\subsubsection{Inicialización Golosa Diversificada y Filtro Anti-Degeneración}
-Evitar la "trampa de la degeneración dual" es crítico. Si el Maestro comienza vacío o con poca variedad, generará duales erráticos que colapsarán la resolución. Se pre-puebla el pool $\Omega$ mediante el siguiente algoritmo:
-
-\begin{enumerate}
-    \item \textbf{Rutas Directas:} Se construyen trayectos simples de ida y vuelta para cada paciente y cada tipo de vehículo compatible.
-    \item \textbf{Barrido Goloso Múltiple:} Se generan itinerarios complejos priorizando los pacientes bajo tres métricas independientes: mayor beneficio puro, menor distancia euclidiana, y mejor ratio beneficio/distancia. 
-    \item \textbf{Descarte Temporal:} Para forzar la creación de clústeres geográficos variados, una vez que la heurística agrupa a un conjunto de pacientes, los marca como temporalmente "ocupados" y repite el bucle sobre los pacientes restantes hasta agotar la población.
-    \item \textbf{Filtro de Unicidad:} Antes de inyectar los candidatos, se procesan mediante un mapa de \textit{hash} basado en el tipo de vehículo y la secuencia de su camino. Toda ruta estructuralmente duplicada se descarta para mantener la matriz del Maestro matemáticamente limpia.
-\end{enumerate}
-
-A su vez, al extraer los precios sombra del modelo relajado, se aplica una función de saneamiento que topa los duales anómalos o infinitos originados por fallos del motor interno de SCIP, asumiendo un valor máximo seguro ($< 10^{10}$).
-
-\subsubsection{Resolución Entera Final (Maestro IP)}
-Como la Generación de Columnas trabaja sobre un modelo continuo, los resultados de $y_r$ en la última iteración pueden ser fraccionarios. El proceso concluye instanciando un nuevo modelo \textbf{Maestro Entero} (`MaestroInteger`). 
-
-Este modelo toma todas las rutas descubiertas a lo largo del proceso en el \textit{pool} final, pero fuerza las variables de selección a un dominio binario ($y^{int}_r \in \{0, 1\}$). Se le asigna el tiempo restante de ejecución (con una reserva mínima garantizada de 5 segundos) para hallar la combinación entera óptima, que luego se formatea y exporta estrictamente bajo la topología requerida.
+\begin{itemize}
+    \item \textbf{Rutas Directas (\texttt{generar\_rutas\_directas}):} Se construyen trayectos individuales de ida y vuelta desde el centro médico hacia cada paciente que cumpla de manera factible con las restricciones temporales iniciales, asegurando una cobertura básica individual por cada tipo de vehículo compatible.
+    \item \textbf{Construcción Golosa Diversificada (\texttt{generar\_rutas\_golosas}):} Se generan rutas multi-paciente complejas mediante tres criterios de priorización independientes:
+    \begin{enumerate}
+        \item \emph{Priorizar Beneficio}: Selecciona iterativamente los pacientes más rentables que respeten la capacidad de la combi, las ventanas horarias y las normas de bioseguridad.
+        \item \emph{Priorizar Distancia}: Agrupa a los pacientes evaluando la cercanía geográfica respecto al centro médico o la posición actual del recorrido.
+        \item \emph{Priorizar Coeficiente (Ratio Beneficio/Distancia)}: Maximiza la eficiencia económica por unidad de distancia recorrida.
+    \end{enumerate}
+    \item \textbf{Filtrado de Unicidad (\texttt{filtrar\_rutas\_unicas}):} Todas las rutas candidatas generadas se procesan mediante una clave de control basada en el tipo de vehículo y la secuencia exacta del camino, eliminando duplicados para mantener la matriz del Problema Maestro limpia y sin redundancias.
+\end{itemize}
 
 \newpage
 \section{Estrategia 3: SaludChallenger (Branch \& Price)}
