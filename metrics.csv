@@ -1,0 +1,36 @@
+Instancia,Métrica,Salud,SaludCG,Challenger
+instancia1,Mejor objetivo,620.0,620.0,620.0
+instancia1,Cota dual,620.0,640.0,640.0
+instancia1,# restricciones,157,7,7
+instancia1,# variables,99,21,19
+instancia1,# variables en últ. maestro,-,23,19
+instancia17,Mejor objetivo,2251.0,18169.0,17196.0
+instancia17,Cota dual,20482.666666666668,19093.695101157242,18844.6
+instancia17,# restricciones,128516,103,103
+instancia17,# variables,110639,434,342
+instancia17,# variables en últ. maestro,-,434,342
+instancia8,Mejor objetivo,2610.0,7010.0,6735.0
+instancia8,Cota dual,7427.272727272725,7256.374010775066,N/A
+instancia8,# restricciones,18175,43,43
+instancia8,# variables,13199,189,196
+instancia8,# variables en últ. maestro,-,232,196
+test1,Mejor objetivo,390.0,390.0,390.0
+test1,Cota dual,390.0,390.0,390.0
+test1,# restricciones,112,5,5
+test1,# variables,70,8,10
+test1,# variables en últ. maestro,-,10,10
+test2,Mejor objetivo,640.0,640.0,640.0
+test2,Cota dual,640.0,640.0,640.0
+test2,# restricciones,331,8,8
+test2,# variables,228,24,23
+test2,# variables en últ. maestro,-,29,23
+test3,Mejor objetivo,1110.0,1110.0,1110.0
+test3,Cota dual,1110.0,1110.0,1110.0
+test3,# restricciones,423,10,10
+test3,# variables,315,30,38
+test3,# variables en últ. maestro,-,42,38
+test4,Mejor objetivo,20.0,20.0,20.0
+test4,Cota dual,20.0,25.0,25.0
+test4,# restricciones,69,6,6
+test4,# variables,42,11,20
+test4,# variables en últ. maestro,-,16,20

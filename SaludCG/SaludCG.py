@@ -178,6 +178,9 @@ def SaludCG(instancia: str, threshold: float) -> bool:
         submodelos = inicializar_submodelos(flota, pacientes, centro, distancias, incomp, M)
         
         pool_rutas = generar_rutas_iniciales(pacientes, centro, flota, distancias, incomp, pac_dict)
+
+        print(f"[METRIC] n_vars={len(pool_rutas)}")
+        print(f"[METRIC] n_conss={len(pacientes) + len(flota)}")
         
         # ===== BUCLE PRINCIPAL DE GENERACIÓN DE COLUMNAS =====
         iteracion = 0
@@ -208,6 +211,12 @@ def SaludCG(instancia: str, threshold: float) -> bool:
 
             if rutas_agregadas == 0:
                 break
+
+        print(f"[METRIC] n_vars_last_master={len(pool_rutas)}")
+        try:
+            print(f"[METRIC] dual_bound={maestro_rl.getObjVal()}")
+        except:
+            print(f"[METRIC] dual_bound=N/A")
 
         tiempo_restante = threshold - (time.time() - start_time)
         maestro_ip = resolver_maestro_entero(pool_rutas, pacientes, flota, tiempo_restante)

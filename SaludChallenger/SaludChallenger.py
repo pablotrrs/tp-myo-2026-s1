@@ -670,6 +670,13 @@ def SaludChallenger(instancia: str, threshold: float) -> bool:
         print(f"[STATS] Columnas eliminadas: {stats['cols_eliminadas']}")
         print(f"[STATS] Óptimo probado: {'Sí' if optimo_probado else 'No (límite de tiempo/nodos)'}")
         print(f"[STATS] Pacientes atendidos: {len(atendidos)}")
+
+        print(f"[METRIC] n_vars={stats['cols_generadas']}")
+        print(f"[METRIC] n_conss={len(pacientes) + len(flota)}")
+        print(f"[METRIC] n_vars_last_master={sum(1 for r in pool if not r.get('eliminada', False))}")
+        print(f"[METRIC] dual_bound={cota_dual_raiz if cota_dual_raiz is not None else 'N/A'}")
+
+
         for tipo_combi, camino in rutas_finales:
             print(f"Ruta ({tipo_combi}): {camino}")
 

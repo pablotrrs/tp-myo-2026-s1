@@ -186,6 +186,71 @@ Incluidas en `./IN/`:
 | test2     | 5         | 3      | 2       | 640.0     | ✓ Válida  |
 | test3     | 7         | 3      | 3       | 1110.0    | ✓ Válida  |
 
+## Evaluación Comparativa (Sección 4)
+
+### `evaluador.py`
+Script que ejecuta las 3 estrategias contra todas las instancias y recolecta métricas.
+
+Lee un archivo de configuración `.ini`, corre cada modelo como subproceso, parsea las métricas desde stdout (tags `[METRIC]`) y desde los archivos `.out`, y genera:
+- Un **CSV** con todas las métricas
+- Un **XLSX** formateado con la tabla que pide la cátedra (negrita en mejores valores por instancia)
+
+### Configuración: `config.ini`
+
+```ini
+csv_file = ./metrics.csv
+inPath = ./IN/
+threshold = 500
+outPath1 = ./OUT_model1/
+outPath2 = ./OUT_model2/
+outPath3 = ./OUT_model3/
+model1 = Salud/Salud.py
+model2 = SaludCG/SaludCG.py
+model3 = SaludChallenger/SaludChallenger.py
+```
+
+### Uso
+
+```bash
+# Corrida completa (500s por instancia × modelo)
+python evaluador.py config.ini
+
+# Prueba rápida: editar threshold = 30 en config.ini primero
+python evaluador.py config.ini
+```
+
+### Métricas recolectadas
+
+| Métrica | Fuente | Mejor es... |
+|---------|--------|-------------|
+| Mejor objetivo | `.out` → `Z = ...` | Mayor |
+| Cota dual | stdout → `[METRIC] dual_bound=...` | Menor (cota más ajustada) |
+| # restricciones | stdout → `[METRIC] n_conss=...` | Menor |
+| # variables | stdout → `[METRIC] n_vars=...` | Menor |
+| # vars en últ. maestro | stdout → `[METRIC] n_vars_last_master=...` | Menor |
+
+### Tags `[METRIC]`
+
+Cada modelo imprime líneas con el formato `[METRIC] clave=valor` que el evaluador parsea automáticamente. Ejemplo de lo que imprime un modelo:
+
+```
+[METRIC] n_vars=228
+[METRIC] n_conss=331
+[METRIC] dual_bound=640.0
+[METRIC] n_vars_last_master=29
+```
+
+### Dependencias adicionales
+
+```bash
+pip install openpyxl  # para generación de XLSX
+```
+
+### Salida
+
+- `metrics.csv`: datos crudos para procesamiento
+- `metrics.xlsx`: tabla formateada lista para el informe, con celdas de instancia mergeadas y mejores valores en negrita
+
 ## Notas Técnicas
 
 - **Solver**: PySCIPOpt (SCIP)

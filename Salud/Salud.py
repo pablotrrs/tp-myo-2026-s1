@@ -371,7 +371,11 @@ def Salud(instancia: str, threshold: float) -> bool:
         
         # ===== RESOLVER =====
         modelo.optimize()
-        
+
+        print(f"[METRIC] n_vars={modelo.getNVars()}")
+        print(f"[METRIC] n_conss={modelo.getNConss()}")
+        print(f"[METRIC] dual_bound={modelo.getDualbound()}")
+
         # ===== EXTRAER SOLUCIÓN =====
         print(f"\n[4/4] Extrayendo solución...")
         beneficio, rutas, no_atendidos = extraer_solucion(modelo, vars_dict)
