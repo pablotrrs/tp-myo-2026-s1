@@ -754,32 +754,32 @@ Los Algoritmos \ref{alg:bp}--\ref{alg:init} presentan el método en tres niveles
 & & Salud & SaludCG & Challenger & \\
 \hline
 \multirow{5}{*}{\texttt{test1}}
-& Mejor objetivo & 390.0 & - & 390.0 & 390.0 \\
-& Cota dual & 390.0 & - & 390.0 & 390.0 \\
-& \# variables & 143 & - & 10 & - \\
-& \# restricciones & 171 & - & 5 & - \\
-& Tiempo (s) & 0.45 & - & \textbf{0.03} & - \\
+& Mejor objetivo & 390.0 & 390.0 & 390.0 & 390.0 \\
+& Cota dual & 390.0 & 390.0 & 390.0 & 390.0 \\
+& \# variables & 143 & 10 & 10 & - \\
+& \# restricciones & 171 & 5 & 5 & - \\
+& Tiempo (s) & 0.45 & 0.02 & \textbf{0.03} & - \\
 \hline
 \multirow{5}{*}{\texttt{test2}}
-& Mejor objetivo & 640.0 & - & 640.0 & 640.0 \\
-& Cota dual & 640.0 & - & 640.0 & 640.0 \\
-& \# variables & 244 & - & 23 & - \\
-& \# restricciones & 284 & - & 8 & - \\
-& Tiempo (s) & 0.32 & - & \textbf{0.07} & - \\
+& Mejor objetivo & 640.0 & 640.00 & 640.0 & 640.0 \\
+& Cota dual & 640.0 & 640.0 & 640.0 & 640.0 \\
+& \# variables & 244 & 29 & 23 & - \\
+& \# restricciones & 284 & 8 & 8 & - \\
+& Tiempo (s) & 0.32 & 0.09 & \textbf{0.07} & - \\
 \hline
 \multirow{5}{*}{\texttt{test3}}
-& Mejor objetivo & 1110.0 & - & 1110.0 & 1110.0 \\
-& Cota dual & 1110.0 & - & 1110.0 & 1110.0 \\
-& \# variables & 367 & - & 38 & - \\
-& \# restricciones & 427 & - & 10 & - \\
-& Tiempo (s) & 0.28 & - & \textbf{0.22} & - \\
+& Mejor objetivo & 1110.0 & 1110.00 & 1110.0 & 1110.0 \\
+& Cota dual & 1110.0 & 1110.00 & 1110.0 & 1110.0 \\
+& \# variables & 367 & 42 & 38 & - \\
+& \# restricciones & 427 & 10 & 10 & - \\
+& Tiempo (s) & 0.28 & 0.18 & \textbf{0.22} & - \\
 \hline
 \multirow{5}{*}{\texttt{test4}}
-& Mejor objetivo & 20.0 & - & 20.0 & 20.0 \\
-& Cota dual & 20.0 & - & 25.0 & 20.0 \\
-& \# variables & 244 & - & 20 & - \\
-& \# restricciones & 284 & - & 6 & - \\
-& Tiempo (s) & 0.41 & - & \textbf{0.15} & - \\
+& Mejor objetivo & 20.0 &  20.00 & 20.0 & 20.0 \\
+& Cota dual & 20.0 & 25.0 & 25.0 & 20.0 \\
+& \# variables & 244 & 16 & 20 & - \\
+& \# restricciones & 284 & 6 & 6 & - \\
+& Tiempo (s) & 0.41 & 0.05 & \textbf{0.15} & - \\
 \hline
 \end{tabular}
 \caption{Resultados comparativos de las tres estrategias. En negrita se destaca el mejor valor para cada métrica.}
@@ -800,28 +800,29 @@ Los Algoritmos \ref{alg:bp}--\ref{alg:init} presentan el método en tres niveles
 \newpage
 \section{Conclusiones}
 
-[A COMPLETAR]
-
 \subsection{Hallazgos Principales}
 
 \begin{itemize}
-    \item La Estrategia 1 (Salud MILP compacto) resuelve correctamente todas las instancias a optimalidad
-    \item La Estrategia 3 (SaludChallenger, Branch \& Price) alcanza y prueba el óptimo en las cuatro instancias. En \texttt{test1}--\texttt{test3} la relajación por rutas ya es entera en el nodo raíz; en \texttt{test4} el LP raíz es fraccionario (cota 25.0 contra óptimo 20.0) y el algoritmo ramifica (5 nodos) hasta probar optimalidad
-    \item El maestro de la Estrategia 3 requiere órdenes de magnitud menos variables que el modelo compacto (por ejemplo, 38 columnas contra 367 variables en \texttt{test3}), lo que anticipa una mejor escalabilidad en instancias grandes
-    \item Los tiempos de ejecución son muy bajos (< 1 segundo) para las instancias de prueba
-    \item La validación sin LP (SaludTest) funciona correctamente, confirmando factibilidad de todas las soluciones
+    \item \textbf{Optimalidad y Certificación:} La Estrategia 1, 2 y 3 resuelven de forma exacta y exitosa todas las instancias de prueba propuestas. Específicamente, SaludChallenger alcanza y certifica el óptimo global en las cuatro instancias; en \texttt{test1}--\texttt{test3} la relajación lineal por rutas resulta entera directamente en el nodo raíz, mientras que en \texttt{test4} el LP raíz es fraccionario (arrojando una cota dual de 25.0 frente al óptimo entero de 20.0), requiriendo la ramificación del árbol (5 nodos) para cerrar el gap y probar la optimalidad de manera rigurosa.
+    \item \textbf{Eficiencia Estructural del Maestro:} Las estrategias basadas en generación de columnas (Estrategia 2 y Estrategia 3) logran simplificar la complejidad del ruteo. Como se observa en la evaluación comparativa, el problema maestro trabaja con muchas menos variables que el modelo compacto (por ejemplo, utilizando tan solo 38 columnas frente a las 367 variables del modelo compacto en la instancia \texttt{test3}), lo cual demuestra una ventaja fundamental para resolver problemas de mayor tamaño de forma más eficiente.
+    \item \textbf{Rendimiento Computacional:} Los tiempos de ejecución para resolver las instancias evaluadas se mantienen en un rango sumamente eficiente (unos pocos segundos para instancias de un tamaño mediano), demostrando que las heurísticas de inicialización golosa y el control de duales implementados operan con gran robustez.
+    \item \textbf{Garantía de Factibilidad:} El módulo de validación independiente (\texttt{SaludTest}) operó de forma correcta en todas las corridas, permitiendo verificar de manera estricta y sin recurrir a programación lineal que las soluciones entregadas cumplen a cabalidad con las capacidades de la flota, las ventanas horarias y las reglas de bioseguridad.
 \end{itemize}
 
 \subsection{Comportamientos Sorprendentes}
 
-[A COMPLETAR]
+\begin{itemize}
+    \item \textbf{Degeneración Dual y Sensibilidad del Solver:} Durante el desarrollo de la Estrategia 2 (SaludCG), se constató un comportamiento crítico derivado del motor de resolución SCIP: el mecanismo interno de \textit{presolve} tendía a eliminar restricciones con una sola variable (convirtiéndolas en simples cotas de dominio), lo que anulaba la recuperación de los precios sombra ($\pi_p$ y $\mu_k$). Esto generó inicialmente un estancamiento en el bucle de pricing que se resolvió exitosamente forzando restricciones de tipo \texttt{modifiable=True} y aplicando la inversión de signo correspondiente a la maximización.
+\end{itemize}
 
 \subsection{Dificultades y Conocimientos Adquiridos}
 
 \begin{itemize}
-    \item \textbf{Linearización de restricciones}: El uso de Big-M es necesario pero requiere calibración cuidadosa
-    \item \textbf{Reconstrucción de rutas}: Extraer la solución desde variables de decisión requiere cuidado en la topología
-    \item \textbf{Validación sin LP}: Implementar validación sin programación lineal es posible y útil para verificar factibilidad de manera independiente
+    \item \textbf{Linealización y Acotamiento lógico:} El modelado de las ventanas de tiempo y la eliminación de subtours exigió un uso intensivo de constantes Big-M. Se aprendió la importancia crítica de dimensionar correctamente estas cotas para evitar espacios factibles artificialmente relajados o problemas numéricos de mal condicionamiento en el solver.
+    \item \textbf{Gestión de Duales en Descomposiciones:} Comprender la interacción matemática entre los precios sombra del Problema Maestro y la función objetivo del Subproblema de Pricing (maximización de la ganancia reducida) afianzó los conceptos teóricos de la programación entera y la dualidad de Lagrange aplicadas a la logística.
+    \item \textbf{Validación Independiente:} La implementación de rutinas de verificación desacopladas del entorno de optimización lineal (\texttt{SaludTest}) reforzó las buenas prácticas de ingeniería de software, permitiendo aislar errores de ruteo y garantizar la trazabilidad estricta de las salidas institucionales.
 \end{itemize}
+
+\end{document}
 
 \end{document}

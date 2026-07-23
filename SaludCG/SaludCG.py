@@ -217,6 +217,7 @@ def SaludCG(instancia: str, threshold: float) -> bool:
             print(f"[METRIC] dual_bound={maestro_rl.getObjVal()}")
         except:
             print(f"[METRIC] dual_bound=N/A")
+        print(f"[METRIC] time={time.time() - start_time:.2f}")
 
         tiempo_restante = threshold - (time.time() - start_time)
         maestro_ip = resolver_maestro_entero(pool_rutas, pacientes, flota, tiempo_restante)
