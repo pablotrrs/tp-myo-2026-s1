@@ -161,11 +161,10 @@ def construir_nueva_ruta(modelo_pricing: Model, x: dict, z: dict, pacientes: Lis
         "rentabilidad": rentabilidad
     }
 
-def SaludCG(instancia: str, threshold: float) -> bool:
+def SaludCG(instancia: str, threshold: float,
+            out_path: str = "./OUT_modelo2", in_path: str = "./IN") -> bool:
     start_time = time.time()
-    in_path = "./IN"
-    out_path = "./OUT_model2"
-    
+
     print(f"\n{'='*70}")
     print(f"SALUD CG - Generación de Columnas (Estructurado)")
     print(f"Instancia: {instancia}, Threshold: {threshold}s")
@@ -363,9 +362,11 @@ def procesar_salida_final(maestro_ip: Model, pool_rutas: List[dict], pacientes: 
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Uso: python SaludCG.py <instancia> <threshold>")
+        print("Uso: python SaludCG.py <instancia> <threshold> [out_path] [in_path]")
         sys.exit(1)
-    
+
     instancia_param = sys.argv[1]
     threshold_param = float(sys.argv[2])
-    SaludCG(instancia_param, threshold_param)
+    out_path_param = sys.argv[3] if len(sys.argv) > 3 else "./OUT_modelo2"
+    in_path_param = sys.argv[4] if len(sys.argv) > 4 else "./IN"
+    SaludCG(instancia_param, threshold_param, out_path_param, in_path_param)

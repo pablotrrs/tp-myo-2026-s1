@@ -1,0 +1,13 @@
+Z = 2610.0
+Combi_Chica: [0 -> 2 -> 1 -> 0]
+Combi_Chica: [0 -> 3 -> 13 -> 18 -> 28 -> 0]
+Combi_Chica: [0 -> 4 -> 0]
+Combi_Chica: [0 -> 5 -> 25 -> 24 -> 26 -> 0]
+Combi_Chica: [0 -> 6 -> 40 -> 0]
+Combi_Mediana: [0 -> 7 -> 0]
+Combi_Mediana: [0 -> 9 -> 0]
+Combi_Mediana: [0 -> 10 -> 0]
+Combi_Mediana: [0 -> 11 -> 16 -> 37 -> 0]
+Combi_Grande: [0 -> 8 -> 38 -> 0]
+Combi_Grande: [0 -> 12 -> 27 -> 0]
+No_Atendidos: 14, 15, 17, 19, 20, 21, 22, 23, 29, 30, 31, 32, 33, 34, 35, 36, 39

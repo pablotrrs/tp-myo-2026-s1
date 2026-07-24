@@ -26,7 +26,13 @@ import time
 # ---------------------------------------------------------------------------
 
 def parse_ini(path: str) -> dict:
-    """Parsea un archivo clave = valor, ignora líneas vacías y comentarios (#)."""
+    """
+    Parsea un archivo clave = valor, ignora líneas vacías y comentarios (#).
+
+    Si una clave se repite, los valores se acumulan en una lista. Esto permite
+    aceptar la forma literal del enunciado, donde las tres estrategias se
+    declaran con la misma clave:  model = /path/to/model1.py, etc.
+    """
     config = {}
     with open(path) as f:
         for line in f:
@@ -34,7 +40,14 @@ def parse_ini(path: str) -> dict:
             if not line or line.startswith("#"):
                 continue
             key, _, value = line.partition("=")
-            config[key.strip()] = value.strip()
+            key, value = key.strip(), value.strip()
+            if key in config:
+                if isinstance(config[key], list):
+                    config[key].append(value)
+                else:
+                    config[key] = [config[key], value]
+            else:
+                config[key] = value
     return config
 
 
@@ -49,17 +62,27 @@ def cargar_config(ini_path: str) -> dict:
         "modelos": [],
     }
 
-    for i in range(1, 10):  # soporta hasta 9 modelos por si se agrega algo
-        model_key = f"model{i}"
-        out_key = f"outPath{i}"
-        if model_key not in raw:
-            continue
+    def agregar(i: int, script: str):
         config["modelos"].append({
             "id": i,
-            "script": raw[model_key],
-            "out_path": raw.get(out_key, f"./OUT_model{i}/"),
+            "script": script,
+            "out_path": raw.get(f"outPath{i}", f"./OUT_modelo{i}/"),
             "nombre": {1: "Salud", 2: "SaludCG", 3: "Challenger"}.get(i, f"Modelo{i}"),
         })
+
+    # Forma indexada:  model1 = ..., model2 = ...  (en paralelo a outPath1, outPath2)
+    for i in range(1, 10):  # soporta hasta 9 modelos por si se agrega algo
+        if f"model{i}" in raw:
+            agregar(i, raw[f"model{i}"])
+
+    # Forma literal del enunciado:  model = /path/to/modeli.py repetida por estrategia.
+    # Se asocian en orden de aparición a outPath1, outPath2, ...
+    if not config["modelos"] and "model" in raw:
+        scripts = raw["model"]
+        if not isinstance(scripts, list):
+            scripts = [scripts]
+        for i, script in enumerate(scripts, start=1):
+            agregar(i, script)
 
     return config
 
@@ -84,12 +107,19 @@ def descubrir_instancias(in_path: str) -> list:
 # Ejecución de modelos
 # ---------------------------------------------------------------------------
 
-def ejecutar_modelo(script: str, instancia: str, threshold: float) -> tuple:
+def ejecutar_modelo(script: str, instancia: str, threshold: float,
+                    out_path: str, in_path: str) -> tuple:
     """
     Ejecuta un modelo como subproceso.
+
+    Las rutas del .ini se propagan al modelo como argumentos posicionales
+    (out_path, in_path); así el enunciado se cumple literalmente: la salida
+    va a outPathi/{instancia}.out y la entrada se lee de inPath.
+
     Retorna (stdout, stderr, returncode).
     """
-    cmd = [sys.executable, script, instancia, str(threshold)]
+    os.makedirs(out_path, exist_ok=True)
+    cmd = [sys.executable, script, instancia, str(threshold), out_path, in_path]
     timeout_total = threshold + 120  # margen generoso para setup/teardown
 
     try:
@@ -332,10 +362,46 @@ def generar_xlsx(xlsx_path: str, instancias: list, modelos: list, resultados: di
 # Main
 # ---------------------------------------------------------------------------
 
+def cargar_resultados_desde_csv(csv_path: str) -> tuple:
+    """
+    Reconstruye (instancias, modelos, resultados) desde un metrics.csv ya escrito.
+
+    Permite regenerar el XLSX sin volver a correr los modelos, que a 500 s por
+    instancia y modelo es una corrida de casi una hora.
+    """
+    etiqueta_a_clave = {label: key for key, label in METRICAS}
+
+    with open(csv_path, encoding="utf-8") as f:
+        filas = list(csv.reader(f))
+
+    header, cuerpo = filas[0], filas[1:]
+    nombres = header[2:]
+    modelos = [{"id": i + 1, "nombre": n} for i, n in enumerate(nombres)]
+
+    instancias = []
+    resultados = {}
+    for fila in cuerpo:
+        if len(fila) < 3:
+            continue
+        inst, etiqueta, valores = fila[0], fila[1], fila[2:]
+        if inst not in instancias:
+            instancias.append(inst)
+        clave = etiqueta_a_clave.get(etiqueta)
+        if clave is None:
+            continue
+        for modelo, valor in zip(modelos, valores):
+            resultados.setdefault((inst, modelo["id"]), {})[clave] = valor
+
+    return instancias, modelos, resultados
+
+
 def main():
     if len(sys.argv) < 2:
-        print("Uso: python evaluador.py <archivo.ini>")
+        print("Uso: python evaluador.py <archivo.ini> [--desde-csv]")
         print("Ejemplo: python evaluador.py config.ini")
+        print("")
+        print("  --desde-csv  regenera el XLSX a partir del metrics.csv existente,")
+        print("               sin volver a ejecutar los modelos")
         sys.exit(1)
 
     ini_path = sys.argv[1]
@@ -344,6 +410,18 @@ def main():
         sys.exit(1)
 
     config = cargar_config(ini_path)
+
+    if "--desde-csv" in sys.argv[2:]:
+        csv_path = config["csv_file"]
+        if not os.path.exists(csv_path):
+            print(f"[ERROR] No se encontró {csv_path}")
+            sys.exit(1)
+        instancias, modelos, resultados = cargar_resultados_desde_csv(csv_path)
+        xlsx_path = csv_path.replace(".csv", ".xlsx")
+        generar_xlsx(xlsx_path, instancias, modelos, resultados)
+        print(f"[OK] Regenerado desde {csv_path} ({len(instancias)} instancias)")
+        return
+
     instancias = descubrir_instancias(config["in_path"])
 
     if not instancias:
@@ -373,7 +451,8 @@ def main():
 
             t0 = time.time()
             stdout, stderr, rc = ejecutar_modelo(
-                modelo["script"], inst, config["threshold"]
+                modelo["script"], inst, config["threshold"],
+                modelo["out_path"], config["in_path"]
             )
             elapsed = time.time() - t0
 

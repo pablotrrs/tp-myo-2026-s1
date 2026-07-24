@@ -18,7 +18,7 @@ class TestModeloSaludCG(unittest.TestCase):
     @classmethod
     def crear_carpetas_temporales(cls):
         os.makedirs("./IN", exist_ok=True)
-        os.makedirs("./OUT_model2", exist_ok=True)  
+        os.makedirs("./OUT_modelo2", exist_ok=True)  
 
     @classmethod
     def tearDownClass(cls):
@@ -43,7 +43,7 @@ class TestModeloSaludCG(unittest.TestCase):
             ruta = f"./IN/{archivo}_incompatibilidades.in"
             if os.path.exists(ruta):
                 os.remove(ruta)
-            ruta = f"./OUT_model2/{archivo}.out"  
+            ruta = f"./OUT_modelo2/{archivo}.out"  
             if os.path.exists(ruta):
                 os.remove(ruta)
 
@@ -62,7 +62,7 @@ class TestModeloSaludCG(unittest.TestCase):
                 f.write(f"{inc[0]}, {inc[1]}\n")
 
     def leer_resultado(self, nombre):
-        ruta = f"./OUT_model2/{nombre}.out" 
+        ruta = f"./OUT_modelo2/{nombre}.out" 
         self.assertTrue(os.path.exists(ruta), f"El archivo {ruta} no se generó.")
         with open(ruta, "r") as f:
             contenido = f.read()

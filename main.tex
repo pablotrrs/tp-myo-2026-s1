@@ -19,6 +19,9 @@
 
 % Pseudocódigo en castellano
 \floatname{algorithm}{Algoritmo}
+% Numeración por sección: los algoritmos reinician en cada estrategia
+% (3.1, 3.2, 3.3) en lugar de correr de forma continua por todo el documento.
+\numberwithin{algorithm}{section}
 \algrenewcommand\algorithmicrequire{\textbf{Entrada:}}
 \algrenewcommand\algorithmicensure{\textbf{Salida:}}
 \algrenewcommand\algorithmicwhile{\textbf{mientras}}
@@ -32,6 +35,12 @@
 \algrenewcommand\algorithmicloop{\textbf{repetir}}
 \algrenewcommand\algorithmicreturn{\textbf{devolver}}
 \algrenewcommand\algorithmicfunction{\textbf{función}}
+
+% Numeración de subsecciones y subsubsecciones con la misma notación que el
+% enunciado: las subsecciones como (a), (b), (c) y las subsubsecciones como
+% i, ii, iii, iv (el contador de subsubsección se reinicia en cada subsección).
+\renewcommand{\thesubsection}{(\alph{subsection})}
+\renewcommand{\thesubsubsection}{\roman{subsubsection}}
 
 \newtheorem{theorem}{Theorem}
 \newtheorem{lemma}{Lemma}
@@ -65,7 +74,7 @@
 
 \title{\Huge Trabajo Práctico\\\Large Modelado y Optimización}
 \date{
-    \large 2026/1 \\
+    \large Primer semestre 2026 \\
     Universidad Nacional de General Sarmiento \\
     \vspace{2cm}
     \hfill \textbf{Integrantes:}\\
@@ -82,6 +91,9 @@
 \newpage
 \tableofcontents
 \newpage
+
+% El enunciado numera la introducción como sección 0
+\setcounter{section}{-1}
 
 \section{Introducción}
 
@@ -153,19 +165,15 @@ La estrategia Salud resuelve el problema mediante un modelo de \textbf{Programac
 
 \subsubsection{Descripción del Problema Específico}
 
-Se busca diseñar un conjunto de rutas (una por cada vehículo) que:
-\begin{itemize}
-    \item Seleccionen qué pacientes serán atendidos
-    \item Asignen cada paciente atendido a exactamente un vehículo
-    \item Definan el orden de visita para cada vehículo
-    \item Respeten todas las restricciones operativas (capacidad, tiempo, incompatibilidades)
-    \item Maximicen el beneficio neto total
-\end{itemize}
+Diseñar simultáneamente el recorrido de todos los
+vehículos de la flota: qué pacientes se atienden, a qué combi se asigna cada uno y en qué
+orden los visita, respetando capacidad, ventanas horarias e incompatibilidades, de modo de
+maximizar el beneficio neto. A diferencia de las Estrategias 2 y 3, aquí todo se resuelve en
+un único modelo: no hay descomposición ni generación dinámica de variables.
 
 \subsubsection{Conjuntos, Parámetros y Variables de Decisión}
 
-\subsubsection*{Conjuntos}
-
+\textbf{Conjuntos:}
 \begin{itemize}
     \item $P$: Conjunto de pacientes solicitantes, $P = \{1, 2, \ldots, m\}$
     \item $V = \{0\} \cup P$: Conjunto de nodos (centro médico + pacientes)
@@ -175,182 +183,157 @@ Se busca diseñar un conjunto de rutas (una por cada vehículo) que:
     \item $\mathcal{I} \subseteq \mathcal{C} \times \mathcal{C}$: Conjunto de pares de categorías incompatibles
 \end{itemize}
 
-\subsubsection*{Parámetros}
-
+\textbf{Parámetros:}
 \begin{itemize}
-    \item $\text{beneficio}[p]$: Beneficio de atender al paciente $p$ (valor numérico)
-    \item $\text{costo}[t]$: Costo operativo del tipo de combi $t$
+    \item $\text{beneficio}[p]$: Beneficio de atender al paciente $p$
+    \item $\text{costo}[t]$: Costo operativo del tipo de combi $t$; $\text{tipo}[k]$: tipo al que pertenece la combi $k$
     \item $\text{capacidad}[k]$: Número máximo de asientos en la combi $k$
-    \item $(x_p, y_p)$: Coordenadas geográficas del paciente $p$
-    \item $(x_0, y_0)$: Coordenadas del centro médico (nodo 0)
-    \item $d[i,j] = \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2}$: Distancia euclidea entre nodos $i$ y $j$
-    \item $[ih_{\text{inicio}}[p], ih_{\text{fin}}[p]]$: Ventana de tiempo para el paciente $p$
-    \item $\text{categoria}[p]$: Categoría médica del paciente $p$
-    \item $\text{tipo}[k]$: Tipo de combi al que pertenece la combi $k$
-    \item $M = 10000$: Constante Big-M para linearización de restricciones
+    \item $(x_p, y_p)$, $(x_0, y_0)$: Coordenadas del paciente $p$ y del centro médico
+    \item $d[i,j] = \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2}$: Distancia euclídea entre los nodos $i$ y $j$
+    \item $[ih_{\text{inicio}}[p], ih_{\text{fin}}[p]]$: Ventana de tiempo del paciente $p$; $\text{categoria}[p]$: su categoría médica
+    \item $M = 10000$: Constante Big-M para la linealización de las restricciones lógicas
 \end{itemize}
 
-\subsubsection*{Variables de Decisión}
-
+\textbf{Variables de decisión:}
 \begin{itemize}
-    \item $x[i,j,k] \in \{0, 1\}$: Binaria, igual a 1 si la combi $k$ viaja directamente del nodo $i$ al nodo $j$
-    \item $z[p,k] \in \{0, 1\}$: Binaria, igual a 1 si el paciente $p$ es atendido por la combi $k$
-    \item $a[p] \in \{0, 1\}$: Binaria, igual a 1 si el paciente $p$ es atendido (por alguna combi)
-    \item $u[k] \in \{0, 1\}$: Binaria, igual a 1 si la combi $k$ es utilizada (realiza algún viaje)
-    \item $T[i,k] \geq 0$: Continua, tiempo de llegada (o inicio de servicio) a nodo $i$ con combi $k$
+    \item $x[i,j,k] \in \{0, 1\}$: la combi $k$ viaja directamente del nodo $i$ al nodo $j$
+    \item $z[p,k] \in \{0, 1\}$: el paciente $p$ es atendido por la combi $k$
+    \item $a[p] \in \{0, 1\}$: el paciente $p$ es atendido por alguna combi
+    \item $u[k] \in \{0, 1\}$: la combi $k$ es utilizada (realiza algún viaje)
+    \item $T[i,k] \geq 0$: tiempo de llegada (o inicio de servicio) al nodo $i$ con la combi $k$
 \end{itemize}
 
 \subsubsection{Formulación Algebraica Completa}
 
-\begin{align}
-  \max & \quad Z = \sum_{p \in P} \text{beneficio}[p] \cdot a[p] - \sum_{k \in K} \text{costo}[\text{tipo}[k]] \cdot u[k] \label{eq:obj}
-\end{align}
-
-\subsubsection*{Restricciones}
-
-\paragraph{1. Cobertura de Pacientes}
+Con
+$\mathcal{I}_{\text{pacientes}} = \{(p,q) : (\text{categoria}[p], \text{categoria}[q]) \in \mathcal{I}\}$:
 
 \begin{align}
-  \sum_{k \in K} z[p,k] \leq 1 \quad &\forall p \in P \label{eq:cov1}\\
-  a[p] = \sum_{k \in K} z[p,k] \quad &\forall p \in P \label{eq:cov2}
+  \max \quad & Z = \sum_{p \in P} \text{beneficio}[p] \cdot a[p] - \sum_{k \in K} \text{costo}[\text{tipo}[k]] \cdot u[k] \label{eq:obj}\\
+  \text{s.a.} \quad
+  & \sum_{k \in K} z[p,k] \leq 1 \quad \forall p \in P \label{eq:cov1}\\
+  & a[p] = \sum_{k \in K} z[p,k] \quad \forall p \in P \label{eq:cov2}\\
+  & \sum_{j \in V, j \neq i} x[i,j,k] = \sum_{j \in V, j \neq i} x[j,i,k] \quad \forall i \in V,\ k \in K \label{eq:flow}\\
+  & \sum_{j \in P} x[0,j,k] = u[k] \quad \forall k \in K \label{eq:depart}\\
+  & \sum_{i \in P} x[i,0,k] = u[k] \quad \forall k \in K \label{eq:return}\\
+  & \sum_{p \in P} z[p,k] \leq \text{capacidad}[k] \cdot u[k] \quad \forall k \in K \label{eq:cap}\\
+  & T[0,k] = 0 \quad \forall k \in K \label{eq:t0}\\
+  & T[i,k] \geq T[j,k] + d[j,i] - M(1 - x[j,i,k]) \quad \forall j \in V,\ i \in P,\ k \in K,\ i \neq j \label{eq:tprop}\\
+  & T[p,k] \geq ih_{\text{inicio}}[p] - M(1 - z[p,k]) \quad \forall p \in P,\ k \in K \label{eq:twin_lower}\\
+  & T[p,k] \leq ih_{\text{fin}}[p] + M(1 - z[p,k]) \quad \forall p \in P,\ k \in K \label{eq:twin_upper}\\
+  & z[p,k] + z[q,k] \leq 1 \quad \forall k \in K,\ (p,q) \in \mathcal{I}_{\text{pacientes}} \label{eq:incompat}\\
+  & z[p,k] = \sum_{i \in V,\, i \neq p} x[i,p,k] \quad \forall k \in K,\ p \in P \label{eq:vinczx}
 \end{align}
-
-Ecuación \eqref{eq:cov1}: Cada paciente es atendido por a lo sumo una combi.
-
-Ecuación \eqref{eq:cov2}: Un paciente se considera atendido si está asignado a alguna combi.
-
-\paragraph{2. Flujo de Rutas}
-
-\begin{align}
-  \sum_{j \in V, j \neq i} x[i,j,k] = \sum_{j \in V, j \neq i} x[j,i,k] \quad &\forall i \in V, k \in K \label{eq:flow}
-\end{align}
-
-Conservación de flujo: Todo lo que entra a un nodo debe salir (excepto si no se visita).
-
-\paragraph{3. Operación del Centro Médico}
-
-\begin{align}
-  \sum_{j \in P} x[0,j,k] = u[k] \quad &\forall k \in K \label{eq:depart}\\
-  \sum_{i \in P} x[i,0,k] = u[k] \quad &\forall k \in K \label{eq:return}
-\end{align}
-
-Ecuación \eqref{eq:depart}: Si la combi $k$ es utilizada, debe partir desde el centro.
-
-Ecuación \eqref{eq:return}: Si la combi $k$ es utilizada, debe regresar al centro.
-
-\paragraph{4. Restricción de Capacidad}
-
-\begin{align}
-  \sum_{p \in P} z[p,k] \leq \text{capacidad}[k] \cdot u[k] \quad &\forall k \in K \label{eq:cap}
-\end{align}
-
-El número de pacientes en la combi $k$ no puede exceder su capacidad.
-
-\paragraph{5. Restricciones de Ventana de Tiempo}
-
-\begin{align}
-  T[0,k] = 0 \quad &\forall k \in K \label{eq:t0}\\
-  T[i,k] \geq T[j,k] + d[j,i] - M(1 - x[j,i,k]) \quad &\forall i,j \in V, k \in K, i \neq j \label{eq:tprop}\\
-  T[p,k] \geq ih_{\text{inicio}}[p] - M(1 - z[p,k]) \quad &\forall p \in P, k \in K \label{eq:twin_lower}\\
-  T[p,k] \leq ih_{\text{fin}}[p] + M(1 - z[p,k]) \quad &\forall p \in P, k \in K \label{eq:twin_upper}
-\end{align}
-
-Ecuación \eqref{eq:t0}: El tiempo en el centro al inicio es 0.
-
-Ecuación \eqref{eq:tprop}: Propagación del tiempo: si se viaja de $j$ a $i$ con combi $k$, el tiempo en $i$ es al menos el tiempo en $j$ más la distancia.
-
-Ecuaciones \eqref{eq:twin_lower} y \eqref{eq:twin_upper}: Si el paciente $p$ es atendido por combi $k$, debe ser recogido dentro de su ventana de tiempo.
-
-\paragraph{6. Restricciones de Incompatibilidad}
-
-\begin{align}
-  z[p,k] + z[q,k] \leq 1 \quad &\forall k \in K, (p,q) \in \mathcal{I}_{\text{pacientes}} \label{eq:incompat}
-\end{align}
-
-donde $\mathcal{I}_{\text{pacientes}} = \{(p,q) : \text{categoria}[p], \text{categoria}[q] \in \mathcal{I}\}$
-
-Si dos pacientes pertenecen a categorías incompatibles, no pueden estar en el mismo vehículo.
-
-\paragraph{7. Vínculo entre visita y atención del paciente}
-
-\begin{align}
-  z[p, k] = \sum_{i \in V,\, i \neq p} x[i, p, k] \quad &\forall k \in K,\, p \in P \label{eq:vinczx}
-\end{align}
-
-La sumatoria recorre todos los vértices $V = \{0\} \cup P$, incluyendo el centro médico, para capturar también los arcos directos centro$\to$paciente. La igualdad cierra ambas implicaciones: si la combi entra al nodo de un paciente, necesariamente lo recoge; y si lo recoge, alguna combi entró a su nodo.
 
 \subsubsection{Explicación de la Función Objetivo y Restricciones}
 
-\paragraph{Función Objetivo (Ec. \eqref{eq:obj})}
+\textbf{Función objetivo \eqref{eq:obj}.} Maximiza el \emph{beneficio neto}: el primer término
+suma el beneficio de los pacientes atendidos y el segundo resta el costo de operación de las
+combis efectivamente utilizadas. El modelo busca el equilibrio entre atender más pacientes y
+no poner en servicio vehículos que no se paguen a sí mismos.
 
-Maximizar el \textbf{beneficio neto} total:
-\[
-Z = \sum_{p \in P} \text{beneficio}[p] \cdot a[p] - \sum_{k \in K} \text{costo}[\text{tipo}[k]] \cdot u[k]
-\]
+\textbf{Cobertura \eqref{eq:cov1}, \eqref{eq:cov2}.} La primera impide que un paciente sea
+recogido por más de una combi; la desigualdad (en vez de igualdad) es la que permite dejarlo
+sin atender, tal como admite el enunciado. La segunda define $a[p]$ como indicador de que
+$p$ fue atendido por alguna combi, y es la que conecta la cobertura con el objetivo.
 
-Componentes:
+\textbf{Conservación de flujo \eqref{eq:flow}.} Todo lo que ``entra'' a un nodo debe ``salir''
+de él, de modo que los arcos elegidos por cada combi formen caminos y no tramos sueltos.
+
+Por sí sola esta restricción \emph{no} elimina los subtours: un ciclo entre pacientes
+desconectado del centro también conserva el flujo. Quien los elimina es la propagación
+temporal \eqref{eq:tprop}, que al recorrer un ciclo obligaría a $\sum d > 0$ a ser $\leq 0$.
+La única excepción es un ciclo de longitud nula (pacientes con coordenadas idénticas);
+ninguna de las instancias evaluadas presenta domicilios repetidos, pero es una limitación
+conocida de esta formulación, que la Estrategia 3 resuelve agregando un orden de tipo MTZ
+(Ec.~\eqref{eq:pr_mtz}).
+
+\textbf{Operación del centro \eqref{eq:depart}, \eqref{eq:return}.} Si la combi $k$ se
+utiliza ($u[k] = 1$), sale exactamente una vez del centro y regresa exactamente una vez a él;
+si no se utiliza, no puede usar ningún arco incidente al centro. Esto codifica la condición
+del enunciado de que cada combi realiza a lo sumo un viaje.
+
+\textbf{Capacidad \eqref{eq:cap}.} La cantidad de pacientes asignados a la combi $k$ no puede
+superar sus asientos. Al multiplicar por $u[k]$, la restricción también fuerza $z[p,k] = 0$
+para toda combi no utilizada.
+
+\textbf{Ventanas de tiempo \eqref{eq:t0}--\eqref{eq:twin_upper}.} El viaje comienza en
+$t = 0$ en el centro. La propagación \eqref{eq:tprop} arrastra el tiempo a lo largo de los
+arcos usados; al ser una desigualdad, la combi puede \emph{esperar} en la puerta hasta
+$ih_{\text{inicio}}$, tal como exige el enunciado. Las dos últimas obligan a que cada paciente
+atendido sea recogido dentro de su ventana; el término $M(1 - z[p,k])$ las desactiva para las
+combis que no lo atienden.
+
+\textbf{Incompatibilidades \eqref{eq:incompat}.} Dos pacientes de categorías incompatibles no
+pueden compartir vehículo en ningún momento del trayecto. Como cada combi realiza un único
+viaje y nadie desciende antes del centro, basta prohibir que ambos estén asignados a la misma
+combi.
+
+\textbf{Vínculo entre visita y atención \eqref{eq:vinczx}.} Cierra las dos implicaciones: si
+la combi entra al nodo de un paciente entonces lo recoge, y si lo recoge entonces entró a su
+nodo. Usar igualdad (en lugar de $\leq$) ajusta el espacio factible del LP y evita soluciones
+degeneradas en las que una combi atraviesa un nodo sin levantar al paciente. La sumatoria
+recorre todo $V$ (no solo $P$) para contabilizar también los arcos directos
+centro$\to$paciente.
+
+\subsection{Pseudocódigo y Detalles de Implementación}
+
+Al tratarse de un modelo compacto, no hay un algoritmo de búsqueda propio: la exploración
+la realiza íntegramente SCIP. Lo que sí merece describirse es el flujo que rodea al solver
+(Algoritmo~\ref{alg:salud}), en particular el reparto del umbral de tiempo y la
+\emph{reconstrucción de las rutas} a partir de las variables $x$, que no es inmediata.
+
+\begin{algorithm}[H]
+\caption{\textsc{Salud} --- modelo compacto MILP}
+\label{alg:salud}
+\begin{algorithmic}[1]
+\Require instancia (pacientes $P$, centro, flota, incompatibilidades), umbral de tiempo
+\Ensure archivo de salida con la mejor solución entera hallada
+\State $\mathit{inicio} \gets \text{ahora}$; leer la instancia y calcular la matriz de distancias
+\State $K \gets$ una copia individual por cada unidad disponible de cada tipo de combi
+\State construir el MILP con las variables $x, z, a, u, T$ y las restricciones
+    \eqref{eq:cov1}--\eqref{eq:vinczx}
+\State reportar $|$variables$|$ y $|$restricciones$|$ \Comment{del modelo \emph{inicial}, antes del presolve}
+\State $t_{\text{solver}} \gets \text{umbral} - (\text{ahora} - \mathit{inicio}) - \text{reserva}$
+    \Comment{descuenta lectura y armado}
+\State fijar \texttt{limits/time} $\gets t_{\text{solver}}$ y optimizar
+\State reportar la cota dual que informa el solver al detenerse
+\ForAll{combi $k$ con $u_k > 0{,}5$} \Comment{reconstrucción de la ruta}
+    \State $S \gets \{p : z_{pk} > 0{,}5\}$ \Comment{pacientes que recoge}
+    \State $A \gets \{i \mapsto j : x_{ijk} > 0{,}5\}$; recorrer $A$ desde el centro hasta volver a él
+    \If{el recorrido no cubre exactamente $S$} ordenar $S$ por id \Comment{resguardo}
+    \EndIf
+    \State emitir la línea $\langle$tipo$(k)\rangle$: $[0 \to \cdots \to 0]$
+\EndFor
+\State escribir $Z$, las rutas y los pacientes con $a_p < 0{,}5$ como no atendidos
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Detalles de implementación}
+
 \begin{itemize}
-    \item \textbf{Primer término}: Suma de beneficios de todos los pacientes atendidos.
-    \item \textbf{Segundo término}: Costo total de operación de los vehículos utilizados (se resta porque es un costo).
+    \item \textbf{Una variable por unidad de combi.} La flota se ``desdobla'': si hay 5
+    \texttt{Combi\_Chica}, el conjunto $K$ contiene 5 combis individuales, cada una con su
+    propio juego de variables. Esto hace el modelo directo de escribir, pero introduce
+    \emph{simetría} --- las unidades de un mismo tipo son intercambiables ---, que es una de
+    las razones por las que el compacto escala mal (véase la Sección~\ref{sec:conclusiones}).
+    \item \textbf{Tamaño reportado.} Las métricas de la Sección~\ref{sec:evaluacion} se emiten
+    \emph{antes} de llamar al solver: una vez ejecutado, SCIP informa el modelo ya reducido por
+    el presolve, que puede ser menos de la mitad del original y no es lo que pide el enunciado.
+    \item \textbf{Expiración segura del umbral.} El presupuesto se cuenta desde el inicio de la
+    función, de modo que la lectura y el armado del modelo se descuentan del tiempo que recibe
+    el solver; además se reserva un margen de $\min(5,\ \max(1,\ 0{,}02\cdot\text{umbral}))$
+    segundos para extraer la solución y escribir la salida. Si el umbral se agota, SCIP
+    devuelve la mejor solución entera encontrada hasta ese momento.
+    \item \textbf{Big-M.} Se usa $M = 10^4$, holgado frente a las ventanas horarias de las
+    instancias. Un $M$ innecesariamente grande debilita la relajación lineal, y ése es el
+    origen de las cotas duales flojas que se comentan en las conclusiones.
+    \item \textbf{Reconstrucción de rutas.} El orden de visita no es una variable del modelo:
+    se recupera encadenando los arcos $x_{ijk}=1$ desde el centro. El recorrido corta si
+    detecta un nodo repetido, y si el camino resultante no coincide con el conjunto de
+    pacientes asignados se cae a un orden por id, de modo que la salida siempre queda
+    bien formada.
 \end{itemize}
-
-El modelo busca el equilibrio entre maximizar beneficios y minimizar costos operativos.
-
-\paragraph{Restricciones de Cobertura (Ecs. \eqref{eq:cov1}, \eqref{eq:cov2})}
-
-Aseguran que:
-\begin{itemize}
-    \item Cada paciente puede ser atendido por \textbf{a lo sumo una combi} (no hay duplicación)
-    \item La variable $a[p]$ captura correctamente si el paciente fue atendido
-\end{itemize}
-
-\paragraph{Restricción de Flujo (Ec. \eqref{eq:flow})}
-
-Asegura que cada vehículo forma una \textbf{ruta conexa}:
-\begin{itemize}
-    \item Todo lo que "entra" a un nodo debe "salir"
-    \item Previene ciclos desconectados (subtours)
-\end{itemize}
-
-\paragraph{Restricciones de Centro Médico (Ecs. \eqref{eq:depart}, \eqref{eq:return})}
-
-Garantizan que:
-\begin{itemize}
-    \item Todo vehículo utilizado \textbf{parte del centro} al inicio
-    \item Todo vehículo utilizado \textbf{regresa al centro} al final
-\end{itemize}
-
-\paragraph{Restricción de Capacidad (Ec. \eqref{eq:cap})}
-
-Respeta la \textbf{capacidad máxima} de cada vehículo:
-\begin{itemize}
-    \item Número de pacientes $\leq$ capacidad del vehículo
-\end{itemize}
-
-\paragraph{Restricciones de Ventana de Tiempo (Ecs. \eqref{eq:t0}--\eqref{eq:twin_upper})}
-
-Garantizan cumplimiento de horarios:
-\begin{itemize}
-    \item El tiempo en el centro al inicio es cero (tiempo de partida)
-    \item El tiempo se propaga correctamente a lo largo de la ruta
-    \item Si un paciente es atendido, debe ser recogido dentro de su ventana $[ih_{\text{inicio}}, ih_{\text{fin}}]$
-\end{itemize}
-
-\paragraph{Restricciones de Incompatibilidad (Ec. \eqref{eq:incompat})}
-
-Aseguran que:
-\begin{itemize}
-    \item Dos pacientes con categorías médicas incompatibles \textbf{no pueden compartir vehículo}
-    \item Previene conflictos por bioseguridad o protocolo médico
-\end{itemize}
-
-\paragraph{Vínculo entre visita y atención del paciente (Ec. \eqref{eq:vinczx})}
-Asegura que:
-\begin{itemize}
-    \item Si la combi $k$ entra al nodo de un paciente $p$, entonces lo recoge (la entrada implica atención)
-    \item Si un paciente es atendido por la combi $k$, entonces la combi debió haber entrado a su nodo (la atención implica entrada)
-\end{itemize}
-El uso de igualdad (en lugar de $\leq$) ajusta el espacio factible del LP y evita que el solver encuentre soluciones degenerades donde una combi visita un nodo sin recoger al paciente. La sumatoria sobre $V$ (no solo $P$) garantiza que los arcos directos centro$\to$paciente sean contabilizados.
 
 \newpage
 \section{Estrategia 2: SaludCG (Generación de Columnas)}
@@ -368,9 +351,19 @@ El proceso ejecuta un bucle continuo entre ambos modelos. Finaliza únicamente c
 
 \subsection{Modelo Matemático}
 
-\subsubsection{Problema Maestro Relajado}
+\subsubsection{Descripción del Problema Específico}
 
-El Problema Maestro abstrae la topología del ruteo y se concentra puramente en la selección de conjuntos. Sea $\Omega$ el conjunto dinámico de rutas generadas hasta el momento, y $\Omega_k \subseteq \Omega$ las rutas pertenecientes al tipo de vehículo $k$.
+\paragraph{Problema Maestro Relajado}
+
+Decidir \emph{qué rutas ejecutar} para maximizar el beneficio neto, dado un conjunto de rutas ya construidas. El Problema Maestro abstrae la topología del ruteo y se concentra puramente en la selección de conjuntos: toda la factibilidad del recorrido (capacidad, ventanas horarias, incompatibilidades) ya está garantizada en la construcción de cada columna. Sea $\Omega$ el conjunto dinámico de rutas generadas hasta el momento, y $\Omega_k \subseteq \Omega$ las rutas pertenecientes al tipo de vehículo $k$.
+
+\paragraph{Subproblema de Pricing}
+
+Por cada iteración y tipo de combi $k$, hallar la ruta factible de \emph{máxima ganancia reducida}: aquella que, de incorporarse al pool, más mejoraría el valor del maestro. Es un problema de ruteo de un solo vehículo con selección de pacientes y ventanas de tiempo (VRPTW con \emph{prizes}), que concentra toda la complejidad topológica que el maestro delega.
+
+\subsubsection{Conjuntos, Parámetros y Variables de Decisión}
+
+\paragraph{Problema Maestro Relajado}
 
 \textbf{Conjuntos y Parámetros:}
 \begin{itemize}
@@ -388,18 +381,7 @@ El Problema Maestro abstrae la topología del ruteo y se concentra puramente en 
     \item $y_r \in [0, 1]$: Variable continua que representa la fracción de utilización de la ruta $r \in \Omega$.
 \end{itemize}
 
-\textbf{Formulación:}
-\begin{align}
-  \max & \quad Z = \sum_{r \in \Omega} \text{rentabilidad}_r \cdot y_r \label{eq:cg_obj}\\
-  \text{s.a.} & \quad \sum_{r \in \Omega: p \in r} y_r \leq 1 \quad \forall p \in P \quad (\text{Dual: } \pi_p \geq 0) \label{eq:cg_pacientes}\\
-  & \quad \sum_{r \in \Omega_k} y_r \leq \text{cant\_disponible}_k \quad \forall k \in K \quad (\text{Dual: } \mu_k \geq 0) \label{eq:cg_flota}
-\end{align}
-
-La restricción \eqref{eq:cg_pacientes} garantiza que cada paciente se atienda a lo sumo una vez. De aquí se extrae el dual $\pi_p$, que funciona como el "precio sombra" o costo de oportunidad que el sistema está pagando por ese paciente. La restricción \eqref{eq:cg_flota} limita el uso de la flota al stock real, extrayendo el dual $\mu_k$ que penaliza el agotamiento de vehículos.
-
-\subsubsection{Subproblema de Pricing}
-
-Por cada iteración y tipo de combi $k$, se resuelve un problema de ruteo elemental con recolección y ventanas de tiempo (VRPTW) para hallar una nueva columna candidata.
+\paragraph{Subproblema de Pricing}
 
 \textbf{Conjuntos y Parámetros del Subproblema:}
 \begin{itemize}
@@ -423,12 +405,23 @@ Por cada iteración y tipo de combi $k$, se resuelve un problema de ruteo elemen
     \item $T_i \geq 0$: Variable continua que indica el tiempo de llegada o inicio de servicio en el nodo $i$.
 \end{itemize}
 
-\textbf{Formulación Algebraica del Pricing:}
+\subsubsection{Formulación Algebraica Completa}
+
+\paragraph{Problema Maestro Relajado}
+
 \begin{align}
-  \max \quad & \bar{c} = \sum_{p \in P} (\text{beneficio}_p - \pi_p) \cdot z_p - \text{costo\_operacion}_k - \mu_k \label{eq:cg_pricing}
+  \max & \quad Z = \sum_{r \in \Omega} \text{rentabilidad}_r \cdot y_r \label{eq:cg_obj}\\
+  \text{s.a.} & \quad \sum_{r \in \Omega: p \in r} y_r \leq 1 \quad \forall p \in P \quad (\text{Dual: } \pi_p \geq 0) \label{eq:cg_pacientes}\\
+  & \quad \sum_{r \in \Omega_k} y_r \leq \text{cant\_disponible}_k \quad \forall k \in K \quad (\text{Dual: } \mu_k \geq 0) \label{eq:cg_flota}
 \end{align}
-\textbf{Sujeto a:}
+
+\paragraph{Subproblema de Pricing}
+
+% Objetivo y restricciones van en un unico align para que el modelo no pueda
+% quedar partido entre dos paginas (amsmath no corta dentro de un align).
 \begin{align}
+  \max \quad & \bar{c} = \sum_{p \in P} (\text{beneficio}_p - \pi_p) \cdot z_p - \text{costo\_operacion}_k - \mu_k \label{eq:cg_pricing}\\
+  \text{s.a.} \quad
   & \sum_{p \in P} z_p \leq \text{asientos}_k \label{eq:pr_cap_cg}\\
   & \sum_{i \in V, i \neq p} x_{i,p} = z_p \quad \forall p \in P \label{eq:pr_in_cg}\\
   & \sum_{j \in V, j \neq p} x_{p,j} = z_p \quad \forall p \in P \label{eq:pr_out_cg}\\
@@ -441,7 +434,15 @@ Por cada iteración y tipo de combi $k$, se resuelve un problema de ruteo elemen
   & z_{p1} + z_{p2} \leq 1 \quad \forall (p_1, p_2) \in \mathcal{I} \label{eq:pr_incompat}
 \end{align}
 
-\textbf{Explicación de las Restricciones del Pricing:}
+\subsubsection{Explicación de la Función Objetivo y Restricciones}
+
+\paragraph{Problema Maestro Relajado}
+
+El objetivo \eqref{eq:cg_obj} suma la rentabilidad neta de las rutas seleccionadas; coincide con el beneficio neto del enunciado porque cada columna ya descuenta el costo operativo de su combi. La restricción \eqref{eq:cg_pacientes} garantiza que cada paciente se atienda a lo sumo una vez (la desigualdad permite dejarlo sin cubrir, tal como admite el enunciado). De aquí se extrae el dual $\pi_p$, que funciona como el ``precio sombra'' o costo de oportunidad que el sistema está pagando por ese paciente. La restricción \eqref{eq:cg_flota} limita el uso de la flota al stock real, extrayendo el dual $\mu_k$ que penaliza el agotamiento de vehículos. En el maestro relajado $y_r$ es continua; la integralidad se recupera al final resolviendo el maestro entero sobre el pool acumulado.
+
+\paragraph{Subproblema de Pricing}
+
+El objetivo \eqref{eq:cg_pricing} maximiza la ganancia reducida de la columna: cada paciente ``vale'' su beneficio menos el precio sombra $\pi_p$ que el maestro ya está pagando por cubrirlo, y se descuentan las constantes $\text{costo\_operacion}_k$ y $\mu_k$, que no dependen de las variables.
 \begin{itemize}
     \item \textbf{Capacidad (\eqref{eq:pr_cap_cg}):} Limita la cantidad máxima de pacientes que puede recoger la combi según sus asientos disponibles.
     \item \textbf{Flujo de nodos (\eqref{eq:pr_in_cg}, \eqref{eq:pr_out_cg}):} Asegura que si un paciente es atendido ($z_p = 1$), obligatoriamente una arista entra y otra sale de su nodo; si no es atendido, el flujo es cero.
@@ -452,8 +453,54 @@ Por cada iteración y tipo de combi $k$, se resuelve un problema de ruteo elemen
 
 Si el solver encuentra una solución factible cuya ganancia reducida $\bar{c}$ es estrictamente mayor que $10^{-4}$, la secuencia de nodos se traduce a un formato estructurado y se inyecta como una nueva columna $r$ en el \textit{pool} del Maestro.
 
-\subsection{Inicialización de Rutas Iniciales}
+\subsection{Pseudocódigo y Detalles de Implementación}
 
+El Algoritmo~\ref{alg:cg} resume el esquema completo: se parte de un pool inicial construido
+heurísticamente y se alterna maestro $\leftrightarrow$ pricing hasta que ningún tipo de combi
+aporte columnas atractivas, momento en el cual se resuelve el maestro entero sobre el pool
+acumulado para recuperar una solución factible.
+
+\begin{algorithm}[H]
+\caption{\textsc{SaludCG} --- generación de columnas}
+\label{alg:cg}
+\begin{algorithmic}[1]
+\Require instancia (pacientes $P$, centro, flota, incompatibilidades), umbral de tiempo
+\Ensure archivo de salida con la mejor solución entera hallada
+\State leer la instancia y calcular la matriz de distancias; $\mathit{inicio} \gets \text{ahora}$
+\State construir un MILP de pricing por cada tipo de combi $k$ \Comment{se arma una sola vez}
+\State $\Omega \gets \Call{RutasIniciales}{ }$ \Comment{directas $+$ golosas; ver más abajo}
+\Loop
+    \If{$\text{ahora} - \mathit{inicio} > 0{,}8 \cdot \text{umbral}$} \textbf{salir del ciclo}
+        \Comment{se reserva el $20\%$ final para el maestro entero}
+    \EndIf
+    \State resolver el LP maestro relajado sobre $\Omega$ $\Rightarrow$ duales $\pi_p$ y $\mu_k$
+    \State $\mathit{nuevas} \gets 0$
+    \ForAll{tipo de combi $k$}
+        \State actualizar el objetivo del pricing de $k$ con $(\pi, \mu_k)$ y resolverlo
+            \Comment{límite de 10 s}
+        \If{$\bar{c} > 10^{-4}$ \textbf{y} la ruta no está ya en $\Omega$}
+            \State agregar la ruta a $\Omega$; $\mathit{nuevas} \gets \mathit{nuevas} + 1$
+        \EndIf
+    \EndFor
+    \If{$\mathit{nuevas} = 0$} \textbf{salir del ciclo} \Comment{el LP maestro es óptimo}
+    \EndIf
+\EndLoop
+\State resolver el \emph{maestro entero} ($y_r$ binaria) sobre $\Omega$ con el tiempo restante
+\State escribir $Z$, el itinerario de cada ruta elegida y los pacientes no atendidos
+\end{algorithmic}
+\end{algorithm}
+
+Dos detalles merecen comentario. Primero, el corte por tiempo es \emph{doble}: el bucle de
+generación se detiene al $80\%$ del umbral para que siempre quede presupuesto con el que
+resolver el maestro entero, que es el que produce la solución factible que se escribe. Segundo,
+los modelos de pricing se construyen una única vez y entre iteraciones solo se les actualiza la
+función objetivo con los duales nuevos (vía \texttt{freeTransform} de PySCIPOpt), siguiendo la
+recomendación del enunciado de modificar dinámicamente un modelo ya ejecutado en lugar de
+reconstruirlo desde cero.
+
+\subsubsection{Detalles de implementación}
+
+\paragraph{Inicialización de rutas iniciales.}
 Para garantizar una convergencia rápida y eficiente del algoritmo de Generación de Columnas, la estrategia no inicia con un pool de rutas vacío, sino que implementa una fase preliminar de inicialización inteligente en el módulo \texttt{utils\_saludCG.py}. Esta etapa combina rutas directas y enfoques heurísticos golosos para poblar el conjunto $\Omega$ con opciones de alta calidad desde la primera iteración:
 
 \begin{itemize}
@@ -519,11 +566,27 @@ El algoritmo se organiza en seis pasos; los pseudocódigos correspondientes est�
 
 La estrategia utiliza dos modelos que dialogan entre sí: el \textbf{problema maestro}, que selecciona rutas, y el \textbf{subproblema de pricing}, que construye rutas nuevas. Se describen a continuación, junto con las reglas de ramificación que los conectan con el árbol de búsqueda.
 
-\subsubsection{Problema Maestro (formulación por rutas)}
+\subsubsection{Descripción del Problema Específico}
 
-\paragraph{i. Problema que resuelve.} Decidir \emph{qué rutas ejecutar} para maximizar el beneficio neto, suponiendo conocido el conjunto de todas las rutas factibles. Una \emph{ruta} es el recorrido de una combi que parte del centro, recoge un subconjunto de pacientes en cierto orden y regresa al centro, respetando capacidad, ventanas de tiempo e incompatibilidades. Esta formulación traslada toda la complejidad del ruteo a la definición de las columnas: al maestro solo le queda combinarlas.
+\paragraph{Problema Maestro (formulación por rutas)}
 
-\paragraph{ii. Conjuntos, parámetros y variables.}
+Decidir \emph{qué rutas ejecutar} para maximizar el beneficio neto, suponiendo conocido el conjunto de todas las rutas factibles. Una \emph{ruta} es el recorrido de una combi que parte del centro, recoge un subconjunto de pacientes en cierto orden y regresa al centro, respetando capacidad, ventanas de tiempo e incompatibilidades. Esta formulación traslada toda la complejidad del ruteo a la definición de las columnas: al maestro solo le queda combinarlas.
+
+\paragraph{Subproblema de Pricing}
+
+Dados los precios sombra del maestro restringido, encontrar ---para cada tipo de combi $t$--- la ruta factible de \emph{máxima ganancia reducida}: la columna que más mejoraría el LP actual si se agregara. Es un problema de ruteo de un solo vehículo con selección de pacientes.
+
+Sean $\pi_p$ los duales de \eqref{eq:bp_cover} y $\mu_t$ los de \eqref{eq:bp_fleet} (o de sus cotas en el nodo). El costo reducido de una ruta $r \in \Omega_t$ es
+\[
+\bar{c}_r \;=\; c_r - \sum_{p \in P} a_{pr}\, \pi_p - \mu_t
+\;=\; \sum_{p \in P} a_{pr}\, (\text{beneficio}[p] - \pi_p) \;-\; \text{costo}[t] - \mu_t,
+\]
+por lo que basta maximizar la suma $\sum_p (\text{beneficio}[p] - \pi_p)\, z_p$ sobre las rutas factibles y restar al final las constantes $\text{costo}[t] + \mu_t$.
+
+\subsubsection{Conjuntos, Parámetros y Variables de Decisión}
+
+\paragraph{Problema Maestro (formulación por rutas)}
+
 \begin{itemize}
     \item $P$: pacientes; $T$: tipos de combi
     \item $\Omega_t$: conjunto (de tamaño exponencial) de rutas factibles para el tipo $t$; $\Omega = \bigcup_{t \in T} \Omega_t$
@@ -533,35 +596,9 @@ La estrategia utiliza dos modelos que dialogan entre sí: el \textbf{problema ma
     \item Variable de decisión: $y_r \in \{0,1\}$, igual a 1 si la ruta $r$ se ejecuta
 \end{itemize}
 
-\paragraph{iii. Formulación.}
-\begin{align}
-  \max & \quad Z = \sum_{r \in \Omega} c_r \cdot y_r \label{eq:bp_obj}\\
-  \text{s.a.} & \quad \sum_{r \in \Omega} a_{pr} \cdot y_r \leq 1 \quad \forall p \in P \label{eq:bp_cover}\\
-  & \quad \sum_{r \in \Omega_t} y_r \leq \text{disp}[t] \quad \forall t \in T \label{eq:bp_fleet}\\
-  & \quad y_r \in \{0, 1\} \quad \forall r \in \Omega \label{eq:bp_bin}
-\end{align}
+\paragraph{Subproblema de Pricing}
 
-\paragraph{iv. Explicación.} El objetivo \eqref{eq:bp_obj} suma la rentabilidad neta de las rutas elegidas; coincide con el beneficio neto del enunciado porque cada ruta ya descuenta el costo de su combi. La restricción \eqref{eq:bp_cover} impide que un paciente sea atendido por más de una ruta (atenderlo o no queda implícito: la desigualdad permite dejarlo sin cubrir), y \eqref{eq:bp_fleet} que se usen más vehículos de un tipo que los disponibles. Como $|\Omega|$ es exponencial, el modelo completo nunca se materializa: en cada nodo del árbol se resuelve la \emph{relajación lineal} ($y_r \geq 0$) sobre el subconjunto de columnas generado hasta el momento ---el \emph{maestro restringido}--- y el pricing agrega las que falten.
-
-\paragraph{El maestro restringido dentro de un nodo.} En un nodo del árbol, el LP se ajusta a las decisiones de ramificación vigentes:
-\begin{itemize}
-    \item Participan solo las columnas del pool \emph{compatibles} con el nodo (por ejemplo, en una rama ``$p$ y $q$ separados'' se excluyen las rutas que los contienen a ambos).
-    \item Si la ramificación exige atender al paciente $p$, la restricción \eqref{eq:bp_cover} pasa a igualdad. Para que el LP nunca se vuelva infactible (y sus duales queden bien definidos) se agrega una variable artificial $s_p \in [0,1]$ penalizada con un coeficiente $\rho$ en el objetivo: $\sum_r a_{pr}\, y_r + s_p = 1$. Con $\rho$ mayor que cualquier beneficio alcanzable, $s_p > 0$ solo ocurre si las decisiones del nodo son incompatibles entre sí; en ese caso el nodo se poda.
-    \item Las ramificaciones sobre la flota reemplazan \eqref{eq:bp_fleet} por cotas $lb_t \leq \sum_{r \in \Omega_t} y_r \leq ub_t$ (la cota inferior también lleva su variable artificial penalizada).
-\end{itemize}
-
-\subsubsection{Subproblema de Pricing}
-
-\paragraph{i. Problema que resuelve.} Dados los precios sombra del maestro restringido, encontrar ---para cada tipo de combi $t$--- la ruta factible de \emph{máxima ganancia reducida}: la columna que más mejoraría el LP actual si se agregara. Es un problema de ruteo de un solo vehículo con selección de pacientes.
-
-Sean $\pi_p$ los duales de \eqref{eq:bp_cover} y $\mu_t$ los de \eqref{eq:bp_fleet} (o de sus cotas en el nodo). El costo reducido de una ruta $r \in \Omega_t$ es
-\[
-\bar{c}_r \;=\; c_r - \sum_{p \in P} a_{pr}\, \pi_p - \mu_t
-\;=\; \sum_{p \in P} a_{pr}\, (\text{beneficio}[p] - \pi_p) \;-\; \text{costo}[t] - \mu_t,
-\]
-por lo que basta maximizar la suma $\sum_p (\text{beneficio}[p] - \pi_p)\, z_p$ sobre las rutas factibles y restar al final las constantes $\text{costo}[t] + \mu_t$.
-
-\paragraph{ii. Conjuntos, parámetros y variables.} Para un tipo $t$ fijo, con $V = \{0\} \cup P$ los nodos, $n = |P|$, $d_{ij}$ las distancias, $\text{asientos}[t]$ la capacidad y $M$ una constante grande:
+Para un tipo $t$ fijo, con $V = \{0\} \cup P$ los nodos, $n = |P|$, $d_{ij}$ las distancias, $\text{asientos}[t]$ la capacidad y $M$ una constante grande:
 \begin{itemize}
     \item $x_{ij} \in \{0,1\}$: la combi viaja directamente del nodo $i$ al nodo $j$
     \item $z_p \in \{0,1\}$: la ruta atiende al paciente $p$
@@ -569,7 +606,19 @@ por lo que basta maximizar la suma $\sum_p (\text{beneficio}[p] - \pi_p)\, z_p$ 
     \item $u_p \in [0, n]$: posición del paciente $p$ en el recorrido (orden tipo MTZ)
 \end{itemize}
 
-\paragraph{iii. Formulación.}
+\subsubsection{Formulación Algebraica Completa}
+
+\paragraph{Problema Maestro (formulación por rutas)}
+
+\begin{align}
+  \max & \quad Z = \sum_{r \in \Omega} c_r \cdot y_r \label{eq:bp_obj}\\
+  \text{s.a.} & \quad \sum_{r \in \Omega} a_{pr} \cdot y_r \leq 1 \quad \forall p \in P \label{eq:bp_cover}\\
+  & \quad \sum_{r \in \Omega_t} y_r \leq \text{disp}[t] \quad \forall t \in T \label{eq:bp_fleet}\\
+  & \quad y_r \in \{0, 1\} \quad \forall r \in \Omega \label{eq:bp_bin}
+\end{align}
+
+\paragraph{Subproblema de Pricing}
+
 \begin{align}
   \max \quad & \sum_{p \in P} (\text{beneficio}[p] - \pi_p) \cdot z_p \label{eq:bp_pricing}\\
   \text{s.a.} \quad
@@ -590,23 +639,24 @@ y, según las decisiones del nodo (con $J$ los pares ``juntos'', $S$ los pares `
   z_p = 0 \quad \forall p \in F \label{eq:pr_branch}
 \end{align}
 
-\paragraph{iv. Explicación.} El objetivo \eqref{eq:bp_pricing} maximiza la parte variable de la ganancia reducida: cada paciente ``vale'' su beneficio menos el precio sombra $\pi_p$ que el maestro ya paga por cubrirlo. \eqref{eq:pr_cap} limita los asientos. \eqref{eq:pr_deg} vincula flujo y atención: la combi entra y sale exactamente una vez de cada paciente atendido y no pasa por los no atendidos. \eqref{eq:pr_depot} permite a lo sumo un viaje, que si existe sale del centro y regresa a él; \eqref{eq:pr_ghost} impide ``rutas fantasma'' (atender pacientes sin salir del centro). \eqref{eq:pr_time} propaga el tiempo a lo largo de los arcos usados; al ser una desigualdad, la combi puede \emph{esperar} en la puerta hasta $ih_{\text{inicio}}$, tal como exige el enunciado. \eqref{eq:pr_tw} obliga a recoger a cada paciente atendido dentro de su ventana. \eqref{eq:pr_mtz} es un orden tipo Miller--Tucker--Zemlin entre pacientes: elimina los subtours que \eqref{eq:pr_time} no alcanza a prohibir cuando hay pacientes a distancia $0$ (dos domicilios en la misma coordenada permitirían un ciclo de duración nula). \eqref{eq:pr_inc} replica las incompatibilidades de bioseguridad y \eqref{eq:pr_branch} impone las decisiones de ramificación del nodo. Los pacientes \emph{requeridos} por la ramificación no aparecen aquí: exigir cobertura es una condición global sobre el conjunto de rutas y se impone en el maestro.
+\subsubsection{Explicación de la Función Objetivo y Restricciones}
+
+\paragraph{Problema Maestro (formulación por rutas)}
+
+El objetivo \eqref{eq:bp_obj} suma la rentabilidad neta de las rutas elegidas; coincide con el beneficio neto del enunciado porque cada ruta ya descuenta el costo de su combi. La restricción \eqref{eq:bp_cover} impide que un paciente sea atendido por más de una ruta (atenderlo o no queda implícito: la desigualdad permite dejarlo sin cubrir), y \eqref{eq:bp_fleet} que se usen más vehículos de un tipo que los disponibles. Como $|\Omega|$ es exponencial, el modelo completo nunca se materializa: en cada nodo del árbol se resuelve la \emph{relajación lineal} ($y_r \geq 0$) sobre el subconjunto de columnas generado hasta el momento ---el \emph{maestro restringido}--- y el pricing agrega las que falten.
+
+\paragraph{El maestro restringido dentro de un nodo.} En un nodo del árbol, el LP se ajusta a las decisiones de ramificación vigentes:
+\begin{itemize}
+    \item Participan solo las columnas del pool \emph{compatibles} con el nodo (por ejemplo, en una rama ``$p$ y $q$ separados'' se excluyen las rutas que los contienen a ambos).
+    \item Si la ramificación exige atender al paciente $p$, la restricción \eqref{eq:bp_cover} pasa a igualdad. Para que el LP nunca se vuelva infactible (y sus duales queden bien definidos) se agrega una variable artificial $s_p \in [0,1]$ penalizada con un coeficiente $\rho$ en el objetivo: $\sum_r a_{pr}\, y_r + s_p = 1$. Con $\rho$ mayor que cualquier beneficio alcanzable, $s_p > 0$ solo ocurre si las decisiones del nodo son incompatibles entre sí; en ese caso el nodo se poda.
+    \item Las ramificaciones sobre la flota reemplazan \eqref{eq:bp_fleet} por cotas $lb_t \leq \sum_{r \in \Omega_t} y_r \leq ub_t$ (la cota inferior también lleva su variable artificial penalizada).
+\end{itemize}
+
+\paragraph{Subproblema de Pricing}
+
+El objetivo \eqref{eq:bp_pricing} maximiza la parte variable de la ganancia reducida: cada paciente ``vale'' su beneficio menos el precio sombra $\pi_p$ que el maestro ya paga por cubrirlo. \eqref{eq:pr_cap} limita los asientos. \eqref{eq:pr_deg} vincula flujo y atención: la combi entra y sale exactamente una vez de cada paciente atendido y no pasa por los no atendidos. \eqref{eq:pr_depot} permite a lo sumo un viaje, que si existe sale del centro y regresa a él; \eqref{eq:pr_ghost} impide ``rutas fantasma'' (atender pacientes sin salir del centro). \eqref{eq:pr_time} propaga el tiempo a lo largo de los arcos usados; al ser una desigualdad, la combi puede \emph{esperar} en la puerta hasta $ih_{\text{inicio}}$, tal como exige el enunciado. \eqref{eq:pr_tw} obliga a recoger a cada paciente atendido dentro de su ventana. \eqref{eq:pr_mtz} es un orden tipo Miller--Tucker--Zemlin entre pacientes: elimina los subtours que \eqref{eq:pr_time} no alcanza a prohibir cuando hay pacientes a distancia $0$ (dos domicilios en la misma coordenada permitirían un ciclo de duración nula). \eqref{eq:pr_inc} replica las incompatibilidades de bioseguridad y \eqref{eq:pr_branch} impone las decisiones de ramificación del nodo. Los pacientes \emph{requeridos} por la ramificación no aparecen aquí: exigir cobertura es una condición global sobre el conjunto de rutas y se impone en el maestro.
 
 \paragraph{Criterio de incorporación.} Si $\theta_t^*$ es el óptimo de \eqref{eq:bp_pricing}, la mejor ruta del tipo $t$ tiene ganancia reducida $\theta_t^* - \text{costo}[t] - \mu_t$. Si supera la tolerancia $\varepsilon = 10^{-4}$, la ruta se agrega al pool. Cuando ningún tipo aporta columnas, el LP del nodo es óptimo y su valor es una cota dual válida para todo el subárbol.
-
-\subsubsection{Reglas de Ramificación}
-
-\paragraph{Por qué no se ramifica sobre $y_r$.} La ramificación clásica sobre una variable ($y_r = 0$ vs.\ $y_r = 1$) es incompatible con la generación de columnas: en la rama $y_r = 0$ el pricing tendería a regenerar exactamente la ruta prohibida (sigue siendo la más atractiva), y excluir \emph{una ruta puntual} no puede expresarse como restricción lineal del pricing sin romper su estructura. Además el árbol queda desbalanceado: $y_r = 1$ fija mucho y $y_r = 0$ casi nada. Por eso se ramifica sobre cantidades agregadas de la solución, que sí se traducen en restricciones lineales simples del pricing y en filtros sobre el pool.
-
-Si la solución LP del nodo es fraccionaria, se aplica la primera regla utilizable:
-
-\begin{enumerate}
-    \item \textbf{Ryan--Foster (pares de pacientes)}: se calcula $w_{pq} = \sum_{r:\, p,q \in r} y_r$ (cuánto ``viajan juntos'' $p$ y $q$) y se elige el par de valor más fraccionario (más cercano a $0{,}5$). En la rama \emph{juntos} se exige $z_p = z_q$ en el pricing y se descartan del maestro las columnas que contienen exactamente uno de los dos; en la rama \emph{separados} se exige $z_p + z_q \leq 1$ y se descartan las columnas que los contienen a ambos. Ambas ramas recortan el espacio de forma equilibrada.
-    \item \textbf{Atención de un paciente}: si la cobertura $\alpha_p = \sum_{r} a_{pr} \cdot y_r$ es fraccionaria, en una rama se fuerza la atención de $p$ (la restricción \eqref{eq:bp_cover} pasa a igualdad, con su variable artificial penalizada) y en la otra se prohíbe ($z_p = 0$ en el pricing y filtrado de las columnas que lo contienen).
-    \item \textbf{Vehículos por tipo}: si la cantidad de vehículos usados de un tipo, $v_t = \sum_{r \in \Omega_t} y_r$, es fraccionaria, se ramifica en $v_t \leq \floor{v_t}$ y $v_t \geq \ceil{v_t}$.
-\end{enumerate}
-
-Queda un caso borde: columnas \emph{equivalentes} (mismo tipo de combi y mismo conjunto de pacientes, en distinto orden) pueden repartirse valor fraccionario sin que ninguna regla aplique, porque todas las cantidades agregadas resultan enteras. Como esas columnas tienen idéntica rentabilidad, basta elegir un representante por grupo: se obtiene una solución entera del mismo valor que el LP y el nodo se cierra.
 
 \subsection{Pseudocódigo y Detalles de Implementación}
 \label{sec:challenger_pseudo}
@@ -710,13 +760,28 @@ Los Algoritmos \ref{alg:bp}--\ref{alg:init} presentan el método en tres niveles
 \end{algorithmic}
 \end{algorithm}
 
+
+\paragraph{Reglas de ramificación.}
+
+\paragraph{Por qué no se ramifica sobre $y_r$.} La ramificación clásica sobre una variable ($y_r = 0$ vs.\ $y_r = 1$) es incompatible con la generación de columnas: en la rama $y_r = 0$ el pricing tendería a regenerar exactamente la ruta prohibida (sigue siendo la más atractiva), y excluir \emph{una ruta puntual} no puede expresarse como restricción lineal del pricing sin romper su estructura. Además el árbol queda desbalanceado: $y_r = 1$ fija mucho y $y_r = 0$ casi nada. Por eso se ramifica sobre cantidades agregadas de la solución, que sí se traducen en restricciones lineales simples del pricing y en filtros sobre el pool.
+
+Si la solución LP del nodo es fraccionaria, se aplica la primera regla utilizable:
+
+\begin{enumerate}
+    \item \textbf{Ryan--Foster (pares de pacientes)}: se calcula $w_{pq} = \sum_{r:\, p,q \in r} y_r$ (cuánto ``viajan juntos'' $p$ y $q$) y se elige el par de valor más fraccionario (más cercano a $0{,}5$). En la rama \emph{juntos} se exige $z_p = z_q$ en el pricing y se descartan del maestro las columnas que contienen exactamente uno de los dos; en la rama \emph{separados} se exige $z_p + z_q \leq 1$ y se descartan las columnas que los contienen a ambos. Ambas ramas recortan el espacio de forma equilibrada.
+    \item \textbf{Atención de un paciente}: si la cobertura $\alpha_p = \sum_{r} a_{pr} \cdot y_r$ es fraccionaria, en una rama se fuerza la atención de $p$ (la restricción \eqref{eq:bp_cover} pasa a igualdad, con su variable artificial penalizada) y en la otra se prohíbe ($z_p = 0$ en el pricing y filtrado de las columnas que lo contienen).
+    \item \textbf{Vehículos por tipo}: si la cantidad de vehículos usados de un tipo, $v_t = \sum_{r \in \Omega_t} y_r$, es fraccionaria, se ramifica en $v_t \leq \floor{v_t}$ y $v_t \geq \ceil{v_t}$.
+\end{enumerate}
+
+Queda un caso borde: columnas \emph{equivalentes} (mismo tipo de combi y mismo conjunto de pacientes, en distinto orden) pueden repartirse valor fraccionario sin que ninguna regla aplique, porque todas las cantidades agregadas resultan enteras. Como esas columnas tienen idéntica rentabilidad, basta elegir un representante por grupo: se obtiene una solución entera del mismo valor que el LP y el nodo se cierra.
+
 \subsubsection{Detalles de implementación}
 \label{sec:challenger_impl}
 
 \begin{itemize}
     \item \textbf{Pool global y deduplicación.} Las columnas viven en un único pool compartido por todos los nodos del árbol: una ruta generada en una rama puede reutilizarse en otra. Cada columna se identifica con la clave (tipo de combi, camino) para no insertar duplicados, y en cada nodo el maestro solo ve las columnas \emph{compatibles} con sus decisiones de ramificación.
     \item \textbf{Eliminación de columnas ($K = 25$).} Cada columna lleva un contador de resoluciones consecutivas del maestro en las que valió $y_r = 0$; al llegar a $K$ se marca como eliminada y deja de entrar en los maestros siguientes. Dos salvaguardas mantienen la validez de las cotas: las columnas de la mejor solución entera conocida están \emph{protegidas} (nunca se eliminan) y, si el pricing vuelve a generar una columna eliminada, ésta se \emph{reactiva} en lugar de descartarse, de modo que nunca se declara la convergencia de un LP con columnas atractivas afuera. Se eligió $K = 25$, más conservador que el valor 5 sugerido en el enunciado: mantener columnas de más solo agranda un LP que ya es chico, mientras que eliminar de más obliga al pricing (un MILP costoso) a regenerarlas.
-    \item \textbf{Expiración segura del umbral.} Se fija un instante límite global al inicio, y toda llamada a SCIP (maestros y pricings) recibe \texttt{limits/time} acotado por el tiempo restante; el pricing se limita además a 10 segundos por llamada. Antes de explorar se reserva una ventana final de $\min(10,\ \max(3,\ 0{,}15 \cdot \text{umbral}))$ segundos para el maestro entero de refuerzo. Si el tiempo se agota en medio de un nodo, se devuelve el último LP resuelto (marcado como no convergido) y se reporta el incumbente vigente.
+    \item \textbf{Expiración segura del umbral.} Se fija un instante límite global al inicio, y toda llamada a SCIP (maestros y pricings) recibe \texttt{limits/time} acotado por el tiempo restante; el pricing se limita además a 10 segundos por llamada y su plazo se re-verifica antes de cada tipo de combi, de modo que ningún tipo consuma tiempo ya vencido. Antes de explorar se reserva una ventana final de $\min(30,\ \max(3,\ 0{,}05 \cdot \text{umbral}))$ segundos para el maestro entero de refuerzo, y de ella se descuenta un margen para escribir la salida. Si el tiempo se agota en medio de un nodo, se devuelve el último LP resuelto (marcado como no convergido) y se reporta el incumbente vigente.
     \item \textbf{Prioridad de una solución factible.} La combinación de warm-start y reserva final garantiza que la función siempre escriba una solución factible antes de agotar el umbral: aun con umbrales muy cortos existe al menos el incumbente del warm-start y, en el peor caso, la solución trivial ``no operar'' ($Z = 0$).
     \item \textbf{Obtención de duales en SCIP.} En el maestro LP se desactivan presolve, heurísticas y propagación: si SCIP transforma o reduce el problema, los duales de las restricciones originales se pierden o quedan corruptos. Además, en problemas de maximización SCIP expone los duales de su problema interno de minimización, por lo que deben \emph{negarse} para recuperar los duales verdaderos. Los duales de las cotas superior e inferior de flota de un mismo tipo se suman para formar $\mu_t$.
     \item \textbf{Variables artificiales penalizadas.} La penalización se fija en $\rho = \sum_p |\text{beneficio}[p]| + \sum_t \text{costo}[t] + 1000$, estrictamente mayor que cualquier mejora posible del objetivo: una artificial solo toma valor positivo si las decisiones del nodo son insatisfacibles, y en ese caso el nodo se poda. Su presencia mantiene el LP factible y con duales bien definidos durante toda la generación de columnas.
@@ -724,65 +789,92 @@ Los Algoritmos \ref{alg:bp}--\ref{alg:init} presentan el método en tres niveles
     \item \textbf{Tolerancias y salvaguardas.} Ganancia reducida mínima $\varepsilon = 10^{-4}$, tolerancia de integralidad $10^{-5}$ y de poda $10^{-6}$; tope de 500 nodos como resguardo ante árboles patológicos. El certificado de optimalidad solo se declara si el árbol se agotó sin alcanzar ninguno de los límites.
 \end{itemize}
 
-\newpage
-\section{Evaluación Comparativa}
+\section{Evaluación de las estrategias}
+\label{sec:evaluacion}
 
 \subsection{Configuración de Evaluación}
 
 \begin{itemize}
-    \item \textbf{Instancias}: 4 casos de prueba en carpeta \texttt{IN/}
-    \item \textbf{Timeout global}: 500 segundos por instancia y modelo
-    \item \textbf{Métricas capturadas}:
-    \begin{itemize}
-        \item Mejor objetivo encontrado ($Z$)
-        \item Cota dual (relajación LP)
-        \item Número de restricciones
-        \item Número de variables
-        \item Número de variables en modelo maestro (para CG)
-        \item Tiempo de ejecución
-    \end{itemize}
+    \item \textbf{Instancias}: 7 en la carpeta \texttt{IN/} --- cuatro casos de prueba
+    propios (\texttt{test1}--\texttt{test4}, de 3 a 7 pacientes) y tres instancias
+    provistas por la cátedra (\texttt{instancia1} con 5 pacientes,
+    \texttt{instancia8} con 40 y \texttt{instancia17} con 100)
+    \item \textbf{Umbral de tiempo}: 500 segundos por instancia y modelo
+    \item \textbf{Ejecución}: \texttt{python evaluador.py config.ini}. El script
+    descubre las instancias en \texttt{inPath}, corre cada modelo como subproceso
+    pasándole la instancia, el umbral y las rutas de entrada/salida del \texttt{.ini},
+    y recolecta las métricas de los tags \texttt{[METRIC]} de \emph{stdout} y de la
+    línea \texttt{Z =} de cada \texttt{.out}
+    \item \textbf{Métricas capturadas}: las cinco que pide el enunciado (mejor
+    objetivo, cota dual, \# restricciones, \# variables y \# variables en el último
+    maestro)
 \end{itemize}
 
 \subsection{Tabla Comparativa}
 
+La Tabla~\ref{tabla:comparacion} resume los resultados de las tres estrategias sobre
+las siete instancias de la carpeta \texttt{IN/}, con un umbral de 500 segundos para
+cada instancia y modelo. Los valores provienen del \texttt{metrics.csv} generado por
+\texttt{evaluador.py}.
+
 \begin{table}[H]
 \centering
-\begin{tabular}{|c|c|c|c|c|c|c|}
+\small
+\begin{tabular}{|l|l|r|r|r|}
 \hline
-\multirow{2}{*}{\textbf{Instancia}} & \multirow{2}{*}{\textbf{Métrica}} & \multicolumn{3}{c|}{\textbf{Estrategia}} & \multirow{2}{*}{\textbf{Óptimo}} \\
-\cline{3-5}
-& & Salud & SaludCG & Challenger & \\
+\textbf{Instancia} & \textbf{Métrica} & \textbf{Salud} & \textbf{SaludCG} & \textbf{Challenger} \\
+\hline
+\multirow{5}{*}{\texttt{instancia1}}
+ & Mejor objetivo & 620 & 620 & 620 \\
+ & Cota dual & \textbf{620} & 640 & 640 \\
+ & \# restricciones & 164 & \textbf{7} & \textbf{7} \\
+ & \# variables & 131 & 21 & \textbf{19} \\
+ & \# variables en últ. maestro & - & 23 & \textbf{19} \\
+\hline
+\multirow{5}{*}{\texttt{instancia17}}
+ & Mejor objetivo & 2251 & \textbf{18169} & 17196 \\
+ & Cota dual & 20482.67 & 19093.70 & \textbf{18844.60} \\
+ & \# restricciones & 131968 & \textbf{103} & \textbf{103} \\
+ & \# variables & 113422 & 434 & \textbf{342} \\
+ & \# variables en últ. maestro & - & 434 & \textbf{342} \\
+\hline
+\multirow{5}{*}{\texttt{instancia8}}
+ & Mejor objetivo & 2610 & \textbf{7010} & 6735 \\
+ & Cota dual & 7427.27 & \textbf{7238.95} & N/A \\
+ & \# restricciones & 21556 & \textbf{43} & \textbf{43} \\
+ & \# variables & 18982 & \textbf{189} & 194 \\
+ & \# variables en últ. maestro & - & 231 & \textbf{194} \\
 \hline
 \multirow{5}{*}{\texttt{test1}}
-& Mejor objetivo & 390.0 & 390.0 & 390.0 & 390.0 \\
-& Cota dual & 390.0 & 390.0 & 390.0 & 390.0 \\
-& \# variables & 143 & 10 & 10 & - \\
-& \# restricciones & 171 & 5 & 5 & - \\
-& Tiempo (s) & 0.45 & 0.02 & \textbf{0.03} & - \\
+ & Mejor objetivo & 390 & 390 & 390 \\
+ & Cota dual & 390 & 390 & 390 \\
+ & \# restricciones & 178 & \textbf{5} & \textbf{5} \\
+ & \# variables & 143 & \textbf{8} & 10 \\
+ & \# variables en últ. maestro & - & \textbf{10} & \textbf{10} \\
 \hline
 \multirow{5}{*}{\texttt{test2}}
-& Mejor objetivo & 640.0 & 640.00 & 640.0 & 640.0 \\
-& Cota dual & 640.0 & 640.0 & 640.0 & 640.0 \\
-& \# variables & 244 & 29 & 23 & - \\
-& \# restricciones & 284 & 8 & 8 & - \\
-& Tiempo (s) & 0.32 & 0.09 & \textbf{0.07} & - \\
+ & Mejor objetivo & 640 & 640 & 640 \\
+ & Cota dual & 640 & 640 & 640 \\
+ & \# restricciones & 413 & \textbf{8} & \textbf{8} \\
+ & \# variables & 341 & 24 & \textbf{23} \\
+ & \# variables en últ. maestro & - & 29 & \textbf{23} \\
 \hline
 \multirow{5}{*}{\texttt{test3}}
-& Mejor objetivo & 1110.0 & 1110.00 & 1110.0 & 1110.0 \\
-& Cota dual & 1110.0 & 1110.00 & 1110.0 & 1110.0 \\
-& \# variables & 367 & 42 & 38 & - \\
-& \# restricciones & 427 & 10 & 10 & - \\
-& Tiempo (s) & 0.28 & 0.18 & \textbf{0.22} & - \\
+ & Mejor objetivo & 1110 & 1110 & 1110 \\
+ & Cota dual & 1110 & 1110 & 1110 \\
+ & \# restricciones & 432 & \textbf{10} & \textbf{10} \\
+ & \# variables & 367 & \textbf{30} & 38 \\
+ & \# variables en últ. maestro & - & 42 & \textbf{38} \\
 \hline
 \multirow{5}{*}{\texttt{test4}}
-& Mejor objetivo & 20.0 &  20.00 & 20.0 & 20.0 \\
-& Cota dual & 20.0 & 25.0 & 25.0 & 20.0 \\
-& \# variables & 244 & 16 & 20 & - \\
-& \# restricciones & 284 & 6 & 6 & - \\
-& Tiempo (s) & 0.41 & 0.05 & \textbf{0.15} & - \\
+ & Mejor objetivo & 20 & 20 & 20 \\
+ & Cota dual & \textbf{20} & 25 & 25 \\
+ & \# restricciones & 76 & \textbf{6} & \textbf{6} \\
+ & \# variables & 64 & \textbf{11} & 20 \\
+ & \# variables en últ. maestro & - & \textbf{16} & 20 \\
 \hline
 \end{tabular}
-\caption{Resultados comparativos de las tres estrategias. En negrita se destaca el mejor valor para cada métrica.}
+\caption{Resultados comparativos de las tres estrategias con un umbral de 500 segundos por instancia y modelo. En cada fila se destaca en \textbf{negrita} el mejor valor; cuando las tres estrategias coinciden no se destaca ninguna.}
 \label{tabla:comparacion}
 \end{table}
 
@@ -790,22 +882,27 @@ Los Algoritmos \ref{alg:bp}--\ref{alg:init} presentan el método en tres niveles
 
 \begin{itemize}
     \item \textbf{Mejor objetivo}: Valor de la función objetivo $Z$ encontrado (beneficio neto)
-    \item \textbf{Cota dual}: Valor objetivo de la relajación lineal (proporciona cota inferior)
-    \item \textbf{\# variables}: Cantidad total de variables en el modelo. Para las estrategias basadas en generación de columnas (SaludCG y Challenger) se reporta la cantidad de columnas (rutas) generadas en el problema maestro
-    \item \textbf{\# restricciones}: Cantidad total de restricciones en el modelo. Para SaludCG y Challenger se reportan las restricciones del maestro ($|P| + |T|$)
-    \item \textbf{Tiempo (s)}: Tiempo de ejecución en segundos
-    \item \textbf{-}: No aplicable o no completado aún
+    \item \textbf{Cota dual}: Valor objetivo de la relajación lineal al finalizar la ejecución. Al ser un problema de maximización es una \textbf{cota superior} del óptimo entero: cuanto más baja, más ajustada.
+
+    \textbf{Advertencia sobre su validez en SaludCG y Challenger.} En Salud el valor lo reporta SCIP y es una cota dual certificada del MILP. En las estrategias con generación de columnas, en cambio, es el valor del LP del maestro \emph{restringido}, que solo constituye una cota superior válida si el pricing demostró que ya no quedan columnas de ganancia reducida positiva. El código da por convergida la generación cuando ningún tipo de combi aporta columnas, sin distinguir si el pricing lo \emph{probó} (terminó en \texttt{optimal}) o simplemente agotó su límite de 10 segundos. En \texttt{instancia17} ocurre lo segundo: los subproblemas de los tres tipos de combi se cortan por tiempo, de modo que los valores 19093{,}70 y 18844{,}60 deben leerse como valores de referencia y no como cotas certificadas. En esa fila la única cota rigurosa es la de Salud. Véase la Sección~\ref{sec:conclusiones}
+    \item \textbf{\# variables}: Cantidad de variables del \textbf{modelo inicial}. En Salud son las del MILP compacto antes del \emph{presolve} ($x$, $z$, $a$, $u$ y $T$); en SaludCG y Challenger, las columnas del pool inicial con que arranca el maestro
+    \item \textbf{\# restricciones}: Cantidad de restricciones del \textbf{modelo inicial}. En SaludCG y Challenger son las del maestro ($|P| + |T|$: una de cobertura por paciente y una de disponibilidad por tipo de combi)
+    \item \textbf{\# variables en últ. maestro}: Cantidad de columnas del Modelo Maestro en el momento en que se detiene la generación de columnas, es decir antes de resolver el maestro entero final. Solo aplica a las estrategias con generación de columnas
+    \item \textbf{-}: No aplicable (Salud no usa generación de columnas)
+    \item \textbf{N/A}: No hay cota dual disponible. En Challenger sobre \texttt{instancia8} significa que la generación de columnas del nodo raíz no llegó a converger dentro del umbral (7 iteraciones, con el pricing todavía produciendo columnas), por lo que la estrategia se abstiene de reportar un valor que no sería una cota. Es, paradójicamente, el dato más honesto de esa fila
 \end{itemize}
 
 \newpage
 \section{Conclusiones}
+\label{sec:conclusiones}
 
 \subsection{Hallazgos Principales}
 
 \begin{itemize}
-    \item \textbf{Optimalidad y Certificación:} La Estrategia 1, 2 y 3 resuelven de forma exacta y exitosa todas las instancias de prueba propuestas. Específicamente, SaludChallenger alcanza y certifica el óptimo global en las cuatro instancias; en \texttt{test1}--\texttt{test3} la relajación lineal por rutas resulta entera directamente en el nodo raíz, mientras que en \texttt{test4} el LP raíz es fraccionario (arrojando una cota dual de 25.0 frente al óptimo entero de 20.0), requiriendo la ramificación del árbol (5 nodos) para cerrar el gap y probar la optimalidad de manera rigurosa.
-    \item \textbf{Eficiencia Estructural del Maestro:} Las estrategias basadas en generación de columnas (Estrategia 2 y Estrategia 3) logran simplificar la complejidad del ruteo. Como se observa en la evaluación comparativa, el problema maestro trabaja con muchas menos variables que el modelo compacto (por ejemplo, utilizando tan solo 38 columnas frente a las 367 variables del modelo compacto en la instancia \texttt{test3}), lo cual demuestra una ventaja fundamental para resolver problemas de mayor tamaño de forma más eficiente.
-    \item \textbf{Rendimiento Computacional:} Los tiempos de ejecución para resolver las instancias evaluadas se mantienen en un rango sumamente eficiente (unos pocos segundos para instancias de un tamaño mediano), demostrando que las heurísticas de inicialización golosa y el control de duales implementados operan con gran robustez.
+    \item \textbf{Las tres estrategias coinciden en las instancias chicas.} En \texttt{test1}--\texttt{test4} e \texttt{instancia1} (hasta 7 pacientes) los tres métodos devuelven el mismo objetivo, y Salud lo certifica como óptimo: su cota dual coincide con el objetivo entero. En \texttt{test1}--\texttt{test3} la relajación por rutas ya resulta entera en el nodo raíz de Challenger; en \texttt{test4} el LP raíz es fraccionario (cota 25.0 frente al óptimo entero 20.0) y hace falta ramificar para cerrar el gap. Nótese que en \texttt{test4} e \texttt{instancia1} la cota más ajustada es la del modelo compacto, no la de las descomposiciones.
+    \item \textbf{En las instancias grandes el modelo compacto se derrumba.} Éste es el resultado central de la evaluación. Con el mismo umbral de 500 segundos, en \texttt{instancia8} (40 pacientes) Salud llega a $Z = 2610$ contra $7010$ de SaludCG, y en \texttt{instancia17} (100 pacientes) a $Z = 2251$ contra $18169$: un factor de ocho. La causa es el tamaño del modelo: \texttt{instancia17} genera 113\,422 variables y 131\,968 restricciones, y SCIP consume el presupuesto entero sin cerrar el gap (su cota dual queda en 20\,482, casi diez veces el mejor entero que encontró). El maestro de las descomposiciones, en cambio, trabaja con 103 restricciones y unos cientos de columnas.
+    \item \textbf{Eficiencia estructural del maestro.} La formulación por rutas traslada la complejidad del ruteo al subproblema de pricing y deja un maestro diminuto: en \texttt{instancia17}, 103 restricciones frente a 131\,968, y 342--434 columnas frente a 113\,422 variables. Esa compacidad es la que permite seguir produciendo soluciones de calidad cuando el compacto ya no puede.
+    \item \textbf{El costo lo paga el pricing.} La contracara es que cada iteración de generación de columnas exige resolver un MILP de ruteo por tipo de combi. En las instancias chicas todo termina en menos de un segundo, pero en \texttt{instancia8} SaludCG consume 416~s y Challenger 477~s, y en \texttt{instancia17} Challenger vuelve a agotar su presupuesto (476~s) sin certificar optimalidad. En ambos casos Challenger se detiene por el límite de tiempo, reservando los segundos finales para el maestro entero de refuerzo.
     \item \textbf{Garantía de Factibilidad:} El módulo de validación independiente (\texttt{SaludTest}) operó de forma correcta en todas las corridas, permitiendo verificar de manera estricta y sin recurrir a programación lineal que las soluciones entregadas cumplen a cabalidad con las capacidades de la flota, las ventanas horarias y las reglas de bioseguridad.
     \item \textbf{¿Cómo se prioriza encontrar una solución factible antes de agotar el tiempo?} Cada estrategia implementa mecanismos distintos de garantía de factibilidad. Por ejemplo, en la estrategia 1 al agotarse el tiempo, se retorna la mejor solución entera encontrada hasta ese momento (aunque no sea óptima). Mientras que en la estrategia 2, se utiliza el último Maestro Entero para extraer una solución factible. Por último, la estrategia 3 retorna la mejor solución entera encontrada en cualquier nodo del árbol.
 \end{itemize}
@@ -814,6 +911,29 @@ Los Algoritmos \ref{alg:bp}--\ref{alg:init} presentan el método en tres niveles
 
 \begin{itemize}
     \item \textbf{Degeneración Dual y Sensibilidad del Solver:} Durante el desarrollo de la Estrategia 2 (SaludCG), se constató un comportamiento crítico derivado del motor de resolución SCIP: el mecanismo interno de \textit{presolve} tendía a eliminar restricciones con una sola variable (convirtiéndolas en simples cotas de dominio), lo que anulaba la recuperación de los precios sombra ($\pi_p$ y $\mu_k$). Esto generó inicialmente un estancamiento en el bucle de pricing que se resolvió exitosamente forzando restricciones de tipo \texttt{modifiable=True} y aplicando la inversión de signo correspondiente a la maximización.
+
+    \item \textbf{En \texttt{instancia17}, la generación de columnas no generó ninguna columna.} El resultado más inesperado de la evaluación. SaludCG terminó en 32~s de los 500 disponibles, y el maestro final tiene exactamente las mismas 434 columnas que el pool inicial. Es decir: hizo una única iteración, el pricing --- acotado a 10 segundos por llamada, sobre un MILP de ruteo de 100 pacientes --- no logró exhibir ninguna ruta de ganancia reducida positiva, y el bucle cortó por falta de columnas nuevas. \emph{Todo} el $Z = 18169$ que reporta proviene de la heurística golosa de inicialización, no del método de generación de columnas. Esto invierte la lectura ingenua de la tabla: SaludCG no gana por descomponer mejor, sino porque su pool inicial ya es una buena solución mientras que el compacto ni siquiera consigue una razonable.
+
+    \item \textbf{La calidad del pool inicial pesa más que el refinamiento.} Como corolario del punto anterior, en instancias grandes la heurística golosa resultó ser el componente decisivo y el pricing exacto, el cuello de botella. Challenger, que invierte sus 500 segundos en explorar el árbol y refinar columnas, termina \emph{por debajo} de SaludCG en las dos instancias grandes (17\,196 contra 18\,169 y 6735 contra 7010): el esfuerzo adicional se consume en pricings caros en lugar de en diversificar el pool.
+
+    \item \textbf{El pricing puede \emph{simular} una convergencia que no ocurrió.} El hallazgo más sutil, y el que más nos hizo desconfiar de la lectura directa de la tabla. Comparando las dos instancias grandes aparece una anomalía: Challenger reporta cota dual en \texttt{instancia17} (100 pacientes) pero \texttt{N/A} en \texttt{instancia8} (40), es decir que \emph{converge en la más grande y no en la más chica}. Al medir los subproblemas con el límite de 10 segundos por llamada que usa la implementación, la causa quedó clara:
+
+    \begin{center}
+    \begin{tabular}{|l|c|c|c|}
+    \hline
+    \textbf{Instancia} & \textbf{Combi\_Chica} & \textbf{Combi\_Mediana} & \textbf{Combi\_Grande} \\
+    \hline
+    \texttt{instancia8}  & \texttt{optimal} (2{,}2 s) & \texttt{optimal} (6{,}9 s) & \texttt{timelimit} \\
+    \texttt{instancia17} & \texttt{timelimit} & \texttt{timelimit} & \texttt{timelimit} \\
+    \hline
+    \end{tabular}
+    \end{center}
+
+    En \texttt{instancia17} los tres subproblemas se cortan por tiempo sin resolver. Como ninguno devuelve una columna, el bucle interpreta ``no quedan columnas que mejoren'' y da la generación por convergida --- pero eso no es una demostración, es un vencimiento de plazo. En \texttt{instancia8}, en cambio, dos de los tres pricings sí resuelven a optimalidad, la generación sigue produciendo columnas de verdad y se queda sin tiempo antes de terminar: por eso reporta \texttt{N/A}.
+
+    La conclusión invierte la apariencia de la tabla. El \texttt{N/A} de \texttt{instancia8} no es una carencia sino el dato honesto: la estrategia se abstiene de publicar un número que no sería una cota. Y el 18\,844{,}60 de \texttt{instancia17}, que a primera vista luce como la cota más ajustada de su fila, es el valor del LP de un maestro restringido cuya optimalidad nadie certificó. En esa fila la única cota rigurosa es la de Salud (20\,482{,}67), que proviene del solver como cota dual del MILP completo. La lección de método: en generación de columnas, ``el pricing no encontró nada'' y ``el pricing probó que no hay nada'' son afirmaciones muy distintas, y conviene que el código las distinga antes de publicar una cota.
+
+    \item \textbf{Cotas duales muy flojas en el compacto.} En \texttt{instancia17} la cota dual de Salud (20\,482) es casi diez veces su mejor solución entera (2251). El Big-M de las ventanas de tiempo relaja tanto la formulación que la relajación lineal deja de ser informativa, y el \emph{gap} reportado por el solver no permite distinguir una solución mediocre de una buena.
 \end{itemize}
 
 \subsection{Dificultades y Conocimientos Adquiridos}
@@ -826,6 +946,108 @@ Los Algoritmos \ref{alg:bp}--\ref{alg:init} presentan el método en tres niveles
     \item \textbf{LaTeX:} Uso de LaTeX para la documentación y presentación de resultados, permitiendo generar reportes profesionales y correctamente estructurados.
 \end{itemize}
 
-\end{document}
+\newpage
+% Apendice. Va al final y numerado como 6, de modo que las secciones 0-5 que
+% exige el enunciado conservan su numeracion: SaludTest no es una estrategia
+% y el enunciado no le reserva una seccion propia en el informe.
+\section{Apéndice: módulo de validación \texttt{SaludTest}}
+\label{sec:saludtest}
+
+Además de las tres estrategias, el enunciado exige una función auxiliar de validación
+\texttt{SaludTest(instancia, output)}: una función \emph{booleana} que lee un archivo de
+salida ya generado y decide si la solución que describe es \emph{operativamente factible}
+contrastándola contra los datos de la instancia. Es común a las tres estrategias --- valida
+cualquier \texttt{.out} sin importar qué modelo lo produjo --- y por eso se describe aparte.
+
+La restricción central es que \textbf{no puede usar programación lineal}. La verificación es
+puramente aritmética: se reconstruye el itinerario de cada combi paso a paso, se acumula el
+tiempo de viaje y se contrasta cada condición del enunciado. Ningún solver interviene, de modo
+que la validación es independiente del modelo que generó la solución y no puede ``heredar''
+un error de éste.
+
+\subsection*{Qué verifica}
+
+\begin{enumerate}
+    \item \textbf{Formación del itinerario.} Cada ruta debe empezar y terminar en el centro
+    médico ($\text{id} = 0$), y el tipo de combi declarado debe existir en la flota.
+    \item \textbf{Capacidad.} La cantidad de pacientes de cada ruta no puede superar los
+    asientos de su tipo de combi. Como cada paciente ocupa exactamente un asiento y nadie
+    desciende antes del centro, basta contar los nodos intermedios.
+    \item \textbf{Ventanas de tiempo y tiempos de traslado.} Partiendo de $t = 0$ en el centro,
+    se acumula la distancia euclídea entre nodos consecutivos (velocidad 1, es decir tiempo
+    $=$ distancia). Si la combi llega antes de $ih_{\text{inicio}}$ \emph{espera} --- el
+    tiempo se adelanta a $ih_{\text{inicio}}$, tal como permite el enunciado ---, y si llega
+    después de $ih_{\text{fin}}$ la solución se rechaza.
+    \item \textbf{Incompatibilidades de bioseguridad.} Para cada par de pacientes que comparten
+    combi se verifica que sus categorías no pertenezcan al conjunto $\mathcal{I}$.
+\end{enumerate}
+
+A esos cuatro puntos que pide el enunciado se agregaron tres verificaciones más, sin las
+cuales una solución infactible podía pasar como válida:
+
+\begin{enumerate}\setcounter{enumi}{4}
+    \item \textbf{Disponibilidad de la flota.} La cantidad de rutas de un tipo no puede superar
+    su \texttt{cant\_disponible}. Sin este control, una solución que usara tres combis de un
+    tipo que solo tiene dos unidades era aceptada.
+    \item \textbf{Unicidad de atención.} Ningún paciente puede aparecer en más de una ruta.
+    \item \textbf{Consistencia del reporte.} El valor $Z$ declarado debe coincidir con
+    $\sum \text{beneficio}$ de los atendidos $- \sum \text{costo}$ de las combis usadas, y la
+    lista \texttt{No\_Atendidos} debe ser exactamente el complemento de los atendidos.
+\end{enumerate}
+
+\subsection*{Pseudocódigo}
+
+\begin{algorithm}[H]
+\caption{\textsc{SaludTest} --- validación de factibilidad sin programación lineal}
+\label{alg:saludtest}
+\begin{algorithmic}[1]
+\Require instancia (pacientes $P$, centro, flota, incompatibilidades), archivo \emph{output}
+\Ensure \textbf{verdadero} si la solución es operativamente factible; \textbf{falso} si no
+\State leer la instancia; parsear del \emph{output}: $Z$, la lista de rutas y \texttt{No\_Atendidos}
+\State $\mathit{usos} \gets$ diccionario vacío; $\mathit{atendidos} \gets \emptyset$
+\ForAll{ruta $(\mathit{tipo}, [n_0, \ldots, n_L])$ del output}
+    \If{$\mathit{tipo} \notin \text{flota}$ \textbf{o} $n_0 \neq 0$ \textbf{o} $n_L \neq 0$}
+        \Return \textbf{falso} \Comment{(1) itinerario mal formado}
+    \EndIf
+    \State $\mathit{usos}[\mathit{tipo}] \gets \mathit{usos}[\mathit{tipo}] + 1$;
+        $S \gets [n_1, \ldots, n_{L-1}]$
+    \If{$|S| > \text{asientos}[\mathit{tipo}]$} \Return \textbf{falso} \Comment{(2) capacidad}
+    \EndIf
+    \State $\tau \gets 0$; $\mathit{pos} \gets \text{centro}$
+    \ForAll{$p \in S$ en orden}
+        \State $\tau \gets \tau + d(\mathit{pos}, p)$ \Comment{velocidad 1: tiempo $=$ distancia}
+        \State $\tau \gets \max(\tau,\ ih_{\text{inicio}}[p])$ \Comment{si llega antes, espera}
+        \If{$\tau > ih_{\text{fin}}[p]$} \Return \textbf{falso} \Comment{(3) ventana violada}
+        \EndIf
+        \State $\mathit{pos} \gets p$
+    \EndFor
+    \ForAll{par $\{p, q\} \subseteq S$}
+        \If{$(\text{categoria}[p], \text{categoria}[q]) \in \mathcal{I}$}
+            \Return \textbf{falso} \Comment{(4) incompatibilidad}
+        \EndIf
+    \EndFor
+    \If{$S \cap \mathit{atendidos} \neq \emptyset$} \Return \textbf{falso} \Comment{(6) paciente repetido}
+    \EndIf
+    \State $\mathit{atendidos} \gets \mathit{atendidos} \cup S$
+\EndFor
+\ForAll{tipo $t$ en $\mathit{usos}$}
+    \If{$\mathit{usos}[t] > \text{cant\_disponible}[t]$} \Return \textbf{falso} \Comment{(5) flota}
+    \EndIf
+\EndFor
+\State $Z^{\text{calc}} \gets \sum_{p \in \mathit{atendidos}} \text{beneficio}[p] - \sum_{(\mathit{tipo}, \cdot)} \text{costo}[\mathit{tipo}]$
+\If{$|Z - Z^{\text{calc}}| > \varepsilon$ \textbf{o} \texttt{No\_Atendidos} $\neq P \setminus \mathit{atendidos}$}
+    \Return \textbf{falso} \Comment{(7) reporte inconsistente}
+\EndIf
+\State \Return \textbf{verdadero}
+\end{algorithmic}
+\end{algorithm}
+
+Nótese que el recorrido temporal de la línea 9 es también la verificación de que ``el recorrido
+esté bien calculado'' que pide el enunciado: si el orden de visita declarado en el
+\texttt{.out} no fuera consistente con las distancias y las ventanas, el acumulador $\tau$ lo
+detecta. Las 21 salidas de la entrega (7 instancias $\times$ 3 estrategias) pasan esta
+validación.
+
+\newpage
 
 \end{document}

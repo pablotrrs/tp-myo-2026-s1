@@ -28,14 +28,16 @@ def SaludTest(instancia: str, output_file: str = None,
     - Ventanas de tiempo respetadas para cada paciente
     - Distancias y tiempos calculados correctamente
     - Sin categorías incompatibles en la misma combi
+    - Disponibilidad de la flota respetada (unidades usadas <= cant_disponible)
+    - Ningún paciente atendido por más de una combi
     - Beneficio total calculado correctamente
-    
+
     NO utiliza programación lineal.
     
     Args:
         instancia: nombre de la instancia (ej: "test1")
         output_file: ruta al archivo .out a validar
-                    (default: "./OUT_model1/{instancia}.out")
+                    (default: "./OUT_modelo1/{instancia}.out")
         in_path: ruta a carpeta con archivos de entrada
     
     Retorna: True si la solución es válida, False en caso contrario
@@ -43,7 +45,7 @@ def SaludTest(instancia: str, output_file: str = None,
     
     # Determinar ruta del archivo de salida si no se proporciona
     if output_file is None:
-        output_file = f"./OUT_model1/{instancia}.out"
+        output_file = f"./OUT_modelo1/{instancia}.out"
     
     print(f"\n{'='*70}")
     print(f"SALUDTEST - Validación de Solución")
@@ -84,7 +86,10 @@ def SaludTest(instancia: str, output_file: str = None,
         
         # ===== VALIDAR CADA RUTA =====
         print("\n[3/6] Validando rutas...")
-        
+
+        # Cuenta de unidades usadas por tipo, para contrastar contra cant_disponible
+        usos_por_tipo = {}
+
         for ruta_idx, (tipo_combi, nodos) in enumerate(rutas):
             print(f"\n  Ruta {ruta_idx + 1}: {tipo_combi}")
             
@@ -94,7 +99,8 @@ def SaludTest(instancia: str, output_file: str = None,
                 return False
             
             combi_info = flota[tipo_combi]
-            
+            usos_por_tipo[tipo_combi] = usos_por_tipo.get(tipo_combi, 0) + 1
+
             # V1: Comienza y termina en centro (nodo 0)
             if len(nodos) < 2 or nodos[0] != 0 or nodos[-1] != 0:
                 print(f"    [ERROR] Ruta no comienza o no termina en centro")
@@ -176,14 +182,31 @@ def SaludTest(instancia: str, output_file: str = None,
             # (ya se validó en ventanas de tiempo)
             print(f"    [OK] Distancias calculadas correctamente")
         
+        # V6: Disponibilidad de la flota
+        # Cada tipo de combi tiene un stock finito de unidades; la solucion no
+        # puede planificar mas viajes de un tipo que unidades existentes.
+        print("\n  [INFO] Validando disponibilidad de flota...")
+
+        for tipo_combi, usadas in usos_por_tipo.items():
+            disponibles = flota[tipo_combi].cant_disponible
+            if usadas > disponibles:
+                print(f"    [ERROR] Se usan {usadas} unidades de {tipo_combi} "
+                      f"pero solo hay {disponibles} disponibles")
+                return False
+            print(f"    [OK] {tipo_combi}: {usadas}/{disponibles} unidades")
+
         # ===== VALIDAR PACIENTES NO ATENDIDOS =====
         print("\n[4/6] Validando pacientes no atendidos...")
-        
+
+        # V7: Ningun paciente puede ser recogido por mas de una combi
         pacientes_atendidos = set()
         for _, nodos in rutas:
             for nodo_id in nodos[1:-1]:  # Excluir centros
+                if nodo_id in pacientes_atendidos:
+                    print(f"  [ERROR] El paciente {nodo_id} es atendido por mas de una combi")
+                    return False
                 pacientes_atendidos.add(nodo_id)
-        
+
         pacientes_no_atendidos_esperados = set(p.id for p in pacientes) - pacientes_atendidos
         
         if set(no_atendidos) != pacientes_no_atendidos_esperados:
@@ -246,7 +269,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Uso: python SaludTest.py <instancia> [output_file] [in_path]")
         print("Ejemplo: python SaludTest.py test1")
-        print("         python SaludTest.py test1 ./OUT_model1/test1.out ./IN")
+        print("         python SaludTest.py test1 ./OUT_modelo1/test1.out ./IN")
         sys.exit(1)
     
     instancia = sys.argv[1]

@@ -26,7 +26,7 @@ class TestModeloSaludChallenger(unittest.TestCase):
     @classmethod
     def rutas_de_instancia(cls, archivo):
         return [f"./IN/{archivo}_pacientes.in", f"./IN/{archivo}_flota.in",
-                f"./IN/{archivo}_incompatibilidades.in", f"./OUT_model3/{archivo}.out"]
+                f"./IN/{archivo}_incompatibilidades.in", f"./OUT_modelo3/{archivo}.out"]
 
     @classmethod
     def setUpClass(cls):
@@ -39,7 +39,7 @@ class TestModeloSaludChallenger(unittest.TestCase):
     @classmethod
     def crear_carpetas_temporales(cls):
         os.makedirs("./IN", exist_ok=True)
-        os.makedirs("./OUT_model3", exist_ok=True)
+        os.makedirs("./OUT_modelo3", exist_ok=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -67,7 +67,7 @@ class TestModeloSaludChallenger(unittest.TestCase):
                 f.write(f"{inc[0]}, {inc[1]}\n")
 
     def leer_resultado(self, nombre):
-        ruta = f"./OUT_model3/{nombre}.out"
+        ruta = f"./OUT_modelo3/{nombre}.out"
         self.assertTrue(os.path.exists(ruta), f"El archivo {ruta} no se generó.")
         with open(ruta, "r") as f:
             contenido = f.read()
@@ -463,13 +463,13 @@ class TestModeloSaludChallenger(unittest.TestCase):
                 exito = SaludChallenger(instancia, threshold=30.0)
             self.assertTrue(exito, f"{instancia}: la ejecución no debería fallar.")
 
-            with open(f"./OUT_model3/{instancia}.out", "r") as f:
+            with open(f"./OUT_modelo3/{instancia}.out", "r") as f:
                 contenido = f.read()
             beneficio, _, _ = parsear_salida(contenido.replace("->", " -> "))
             self.assertEqual(beneficio, z_esperado, f"{instancia}: no alcanzó el óptimo conocido.")
 
             # SaludTest espera flechas con espacios: se valida sobre una copia adaptada
-            ruta_adaptada = f"./OUT_model3/{instancia}_saludtest.out"
+            ruta_adaptada = f"./OUT_modelo3/{instancia}_saludtest.out"
             try:
                 with open(ruta_adaptada, "w") as f:
                     f.write(contenido.replace("->", " -> "))

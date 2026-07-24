@@ -238,10 +238,14 @@ def resolver_pricing(mp: Model, x: dict, z: dict, tipo_k: str, combi_info: TipoC
 
 
 def resolver_maestro_lp(pool: List[dict], activos: List[int], pacientes: List[Paciente],
-                        flota: Dict[str, TipoCombi], nodo: Nodo, PEN: float):
+                        flota: Dict[str, TipoCombi], nodo: Nodo, PEN: float,
+                        time_limit: float = None):
     """Relajación LP del maestro restringido en el nodo. Devuelve obj, y, duales y uso de artificiales."""
     m = Model("Maestro_LP")
     m.setParam("display/verblevel", 0)
+    if time_limit is not None:
+        # Sin este límite la llamada era ilimitada y podía desbordar el umbral
+        m.setParam("limits/time", max(1.0, time_limit))
     # Sin presolve, heurísticas ni propagación: si SCIP reduce el problema,
     # los duales de las restricciones originales se pierden o quedan corruptos
     m.setPresolve(SCIP_PARAMSETTING.OFF)
@@ -337,7 +341,7 @@ def cg_en_nodo(nodo: Nodo, pool: List[dict], existentes: set, pacientes: List[Pa
 
         activos = [idx for idx, r in enumerate(pool)
                    if not r["eliminada"] and columna_compatible(r, nodo)]
-        res = resolver_maestro_lp(pool, activos, pacientes, flota, nodo, PEN)
+        res = resolver_maestro_lp(pool, activos, pacientes, flota, nodo, PEN, restante)
         if res is None:
             return None
         obj, yvals, dual_pi, dual_mu, art = res
@@ -357,10 +361,17 @@ def cg_en_nodo(nodo: Nodo, pool: List[dict], existentes: set, pacientes: List[Pa
 
         agregadas = 0
         for tipo, info in flota.items():
+            # El plazo se re-chequea por tipo: antes se repartía un piso de 1 s
+            # a cada uno aunque el tiempo ya estuviera agotado, y con varios
+            # tipos de combi eso desbordaba el umbral global.
+            restante_pricing = deadline - time.time()
+            if restante_pricing <= 0:
+                return obj, yvals, art, False
+
             mp, x, z = pricing[tipo]
             ok, col, _ = resolver_pricing(
                 mp, x, z, tipo, info, pacientes, centro, pac_dict,
-                dual_pi, dual_mu.get(tipo, 0.0), min(10.0, max(1.0, restante))
+                dual_pi, dual_mu.get(tipo, 0.0), min(10.0, restante_pricing)
             )
             if ok:
                 clave = (tipo, tuple(col["camino"]))
@@ -456,9 +467,14 @@ def resolver_maestro_entero(pool: List[dict], pacientes: List[Paciente],
     if not activos:
         return None, []
 
+    # Si no queda tiempo real, no se arranca el solve: antes se forzaba un piso
+    # de 2 s que hacía desbordar el umbral global.
+    if time_limit <= 0.5:
+        return None, []
+
     m = Model("Maestro_IP")
     m.setParam("display/verblevel", 0)
-    m.setParam("limits/time", max(2.0, time_limit))
+    m.setParam("limits/time", time_limit)
 
     y = {idx: m.addVar(vtype="B", name=f"y_{idx}") for idx in activos}
     m.setObjective(quicksum(pool[idx]["rentabilidad"] * y[idx] for idx in activos),
@@ -482,15 +498,14 @@ def resolver_maestro_entero(pool: List[dict], pacientes: List[Paciente],
     return sum(pool[idx]["rentabilidad"] for idx in elegidos), elegidos
 
 
-def SaludChallenger(instancia: str, threshold: float) -> bool:
+def SaludChallenger(instancia: str, threshold: float,
+                    out_path: str = "./OUT_modelo3", in_path: str = "./IN") -> bool:
     """
     Estrategia 3: Branch & Price con inicialización golosa, eliminación de
     columnas y warm-start del incumbente.
     """
     start_time = time.time()
     deadline = start_time + threshold
-    in_path = "./IN"
-    out_path = "./OUT_model3"
 
     print(f"\n{'='*70}")
     print(f"SALUD CHALLENGER - Branch & Price")
@@ -533,7 +548,9 @@ def SaludChallenger(instancia: str, threshold: float) -> bool:
         print(f"[WARM-START] Incumbente inicial: {incumbente_val:.2f}")
 
         # ===== BRANCH & PRICE =====
-        reserva_final = min(10.0, max(3.0, 0.15 * threshold))
+        # Ventana reservada para el maestro entero de refuerzo. Escala con el
+        # umbral: con pools grandes 10 s no alcanzaban y la corrida se pasaba.
+        reserva_final = min(30.0, max(3.0, 0.05 * threshold))
         heap = [Nodo(prioridad=-math.inf, orden=0)]
         contador = 1
         optimo_probado = False
@@ -648,7 +665,10 @@ def SaludChallenger(instancia: str, threshold: float) -> bool:
             optimo_probado = True
 
         # ===== REFUERZO FINAL: maestro entero sobre todo el pool =====
-        tiempo_restante = deadline - time.time()
+        # Se descuenta un margen para armar el modelo, extraer la solución y
+        # escribir el .out, de modo que el umbral global se respete de verdad.
+        margen_escritura = 2.0
+        tiempo_restante = deadline - time.time() - margen_escritura
         val_ip, rutas_ip = resolver_maestro_entero(pool, pacientes, flota, tiempo_restante)
         if val_ip is not None and val_ip > incumbente_val + EPS_OBJ:
             incumbente_val, incumbente_rutas = val_ip, rutas_ip
@@ -700,7 +720,9 @@ def SaludChallenger(instancia: str, threshold: float) -> bool:
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Uso: python SaludChallenger.py <instancia> <threshold>")
+        print("Uso: python SaludChallenger.py <instancia> <threshold> [out_path] [in_path]")
         sys.exit(1)
 
-    SaludChallenger(sys.argv[1], float(sys.argv[2]))
+    out_path_param = sys.argv[3] if len(sys.argv) > 3 else "./OUT_modelo3"
+    in_path_param = sys.argv[4] if len(sys.argv) > 4 else "./IN"
+    SaludChallenger(sys.argv[1], float(sys.argv[2]), out_path_param, in_path_param)

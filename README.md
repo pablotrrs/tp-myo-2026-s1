@@ -20,7 +20,7 @@ Parámetros:
 
 Rutas estándar:
 - **Entrada**: `./IN/{instancia}_*.in`
-- **Salida**: `./OUT_model1/{instancia}.out`
+- **Salida**: `./OUT_modelo1/{instancia}.out`
 
 Retorna: `True` si se completó exitosamente, `False` en caso contrario
 
@@ -34,7 +34,7 @@ def SaludTest(instancia: str, output_file: str = None, in_path: str = "./IN") ->
 
 Parámetros:
 - `instancia`: nombre de la instancia
-- `output_file`: ruta al archivo `.out` (default: `./OUT_model1/{instancia}.out`)
+- `output_file`: ruta al archivo `.out` (default: `./OUT_modelo1/{instancia}.out`)
 - `in_path`: ruta a carpeta con archivos de entrada (default: `./IN`)
 
 **Validaciones (SIN programación lineal):**
@@ -93,7 +93,7 @@ Líneas vacías se ignoran automáticamente.
 
 ## Formato de Salida
 
-Archivo de texto: `./OUT_model1/{instancia}.out`
+Archivo de texto: `./OUT_modelo1/{instancia}.out`
 
 ```
 Z = 540.0
@@ -125,16 +125,26 @@ python Salud/SaludTest.py <instancia> [output_file] [in_path]
 python Salud/SaludTest.py test1
 
 # Ejemplo: validar con ruta explícita
-python Salud/SaludTest.py test1 ./OUT_model1/test1.out ./IN
+python Salud/SaludTest.py test1 ./OUT_modelo1/test1.out ./IN
 ```
 
 ### Resolver y validar
 ```bash
-python validate_salud.py <instancia> <threshold>
+python validate_salud.py <instancia> <threshold> [out_path] [in_path]
 
-# Ejemplo: ejecuta Salud() + SaludTest()
-python validate_salud.py test1 30
+# Ejecuta Salud() + SaludTest() escribiendo en ./OUT_modelo1
+python validate_salud.py test1 500
+
+# Escribiendo en otra carpeta, para no regenerar los archivos de la entrega
+python validate_salud.py test1 500 ./tmp ./IN
 ```
+
+> Los scripts que resuelven una instancia (`Salud.py`, `SaludCG.py`,
+> `SaludChallenger.py`, `main_salud.py` y `validate_salud.py`) escriben por
+> defecto en la carpeta `OUT_modeloi` correspondiente, es decir que **regeneran
+> el archivo de la entrega** de esa instancia. Los `.out` versionados provienen
+> de una corrida completa con `threshold = 500`; si se los quiere conservar
+> intactos, pasar un `out_path` propio como en el segundo ejemplo.
 
 ### Desde código Python
 ```python
@@ -186,7 +196,7 @@ Incluidas en `./IN/`:
 | test2     | 5         | 3      | 2       | 640.0     | ✓ Válida  |
 | test3     | 7         | 3      | 3       | 1110.0    | ✓ Válida  |
 
-## Evaluación Comparativa (Sección 4)
+## Evaluación de las estrategias (Sección 4)
 
 ### `evaluador.py`
 Script que ejecuta las 3 estrategias contra todas las instancias y recolecta métricas.
@@ -201,9 +211,9 @@ Lee un archivo de configuración `.ini`, corre cada modelo como subproceso, pars
 csv_file = ./metrics.csv
 inPath = ./IN/
 threshold = 500
-outPath1 = ./OUT_model1/
-outPath2 = ./OUT_model2/
-outPath3 = ./OUT_model3/
+outPath1 = ./OUT_modelo1/
+outPath2 = ./OUT_modelo2/
+outPath3 = ./OUT_modelo3/
 model1 = Salud/Salud.py
 model2 = SaludCG/SaludCG.py
 model3 = SaludChallenger/SaludChallenger.py

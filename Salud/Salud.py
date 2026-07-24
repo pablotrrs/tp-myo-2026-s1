@@ -6,6 +6,7 @@ Resuelve el problema mediante un modelo compacto MILP.
 import sys
 import os
 import signal
+import time
 from typing import Tuple, List, Dict
 
 # Agregar el directorio padre para importar utils_salud
@@ -314,7 +315,8 @@ def ordenar_ruta(centro: Paciente, pacientes_ids: List[int], x: dict, k: int,
     return ruta
 
 
-def Salud(instancia: str, threshold: float) -> bool:
+def Salud(instancia: str, threshold: float,
+          out_path: str = "./OUT_modelo1", in_path: str = "./IN") -> bool:
     """
     Estrategia 1: Modelo compacto MILP.
     
@@ -323,17 +325,22 @@ def Salud(instancia: str, threshold: float) -> bool:
     Args:
         instancia: nombre de la instancia (sin extensión, ej: "test1")
         threshold: tiempo máximo de ejecución en segundos
-    
+        out_path: carpeta donde escribir {instancia}.out
+        in_path: carpeta con los archivos {instancia}_*.in
+
     Retorna: True si se completó, False en caso contrario
-    
-    Utiliza rutas estándar:
+
+    Rutas por defecto:
     - Entrada: ./IN/{instancia}_*.in
-    - Salida: ./OUT_model1/{instancia}.out
+    - Salida: ./OUT_modelo1/{instancia}.out
+
+    El umbral es global: se cuenta desde el inicio de la función, de modo que la
+    lectura de datos y el armado del modelo se descuentan del presupuesto que se
+    le entrega al solver.
     """
-    
-    in_path = "./IN"
-    out_path = "./OUT_model1"
-    
+
+    start_time = time.time()
+
     print(f"\n{'='*70}")
     print(f"SALUD - Modelo Compacto MILP")
     print(f"Instancia: {instancia}, Threshold: {threshold}s")
@@ -363,17 +370,29 @@ def Salud(instancia: str, threshold: float) -> bool:
         
         print(f"  [OK] Variables: {modelo.getNVars()}")
         print(f"  [OK] Restricciones: {modelo.getNConss()}")
-        
+
+        # El enunciado pide el tamaño del MODELO INICIAL, por lo que estas
+        # métricas se emiten antes de optimizar: después de optimize() SCIP
+        # informa el modelo ya transformado por el presolve, que es más chico.
+        print(f"[METRIC] n_vars={modelo.getNVars()}")
+        print(f"[METRIC] n_conss={modelo.getNConss()}")
+
         # ===== CONFIGURAR TIMEOUT =====
-        print(f"\n[3/4] Resolviendo (timeout: {threshold}s)...")
-        modelo.setParam("limits/time", threshold)
+        # Se le entrega al solver solo el tiempo que queda del umbral global,
+        # descontando lo que ya consumieron la lectura y el armado del modelo.
+        # Se reserva un margen para extraer la solución y escribir el .out.
+        reserva_salida = min(5.0, max(1.0, 0.02 * threshold))
+        elapsed = time.time() - start_time
+        tiempo_solver = max(1.0, threshold - elapsed - reserva_salida)
+
+        print(f"\n[3/4] Resolviendo (umbral global: {threshold}s, "
+              f"ya usados: {elapsed:.1f}s, para el solver: {tiempo_solver:.1f}s)...")
+        modelo.setParam("limits/time", tiempo_solver)
         modelo.setParam("display/verblevel", 0)  # Silenciar SCIP
         
         # ===== RESOLVER =====
         modelo.optimize()
 
-        print(f"[METRIC] n_vars={modelo.getNVars()}")
-        print(f"[METRIC] n_conss={modelo.getNConss()}")
         print(f"[METRIC] dual_bound={modelo.getDualbound()}")
 
         # ===== EXTRAER SOLUCIÓN =====
@@ -408,11 +427,13 @@ def Salud(instancia: str, threshold: float) -> bool:
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Uso: python Salud.py <instancia> <threshold>")
+        print("Uso: python Salud.py <instancia> <threshold> [out_path] [in_path]")
         print("Ejemplo: python Salud.py test1 30")
         sys.exit(1)
-    
+
     instancia = sys.argv[1]
     threshold = float(sys.argv[2])
-    
-    Salud(instancia, threshold)
+    out_path = sys.argv[3] if len(sys.argv) > 3 else "./OUT_modelo1"
+    in_path = sys.argv[4] if len(sys.argv) > 4 else "./IN"
+
+    Salud(instancia, threshold, out_path, in_path)

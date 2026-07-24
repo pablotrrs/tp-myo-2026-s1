@@ -1,0 +1,21 @@
+# Bytecode de Python
+__pycache__/
+*.py[cod]
+
+# Archivos auxiliares de LaTeX (el main.pdf sí se versiona: es entregable)
+*.aux
+*.log
+*.toc
+*.lof
+*.lot
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.bbl
+*.blg
+
+# Entornos y editores
+.venv/
+venv/
+.vscode/
+.idea/
